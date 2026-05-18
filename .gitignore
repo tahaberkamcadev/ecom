@@ -1,0 +1,72 @@
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+.vscode/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# Java
+*.class
+*.jar
+*.war
+*.nar
+*.zip
+*.tar.gz
+*.rar
+
+# Gradle
+.gradle/
+build/
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Docker
+.dockerignore
+
+# Build artifacts
+*.pyc
+__pycache__/
+
+# Database
+*.db
+*.sqlite
+
+# Misc
+.git/
