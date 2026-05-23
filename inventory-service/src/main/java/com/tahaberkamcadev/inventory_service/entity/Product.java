@@ -60,5 +60,8 @@ public class Product {
     private BigDecimal averageRating;
 
     @Column
+    private int totalReviews;
+
+    @Column
     private List<Review> reviewSummary;
 }

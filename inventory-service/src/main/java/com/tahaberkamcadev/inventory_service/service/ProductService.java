@@ -6,14 +6,21 @@ import com.tahaberkamcadev.inventory_service.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import com.tahaberkamcadev.inventory_service.repository.projection.ProductSummary;
 
+import jakarta.transaction.Transactional;
+
 import org.slf4j.Logger;
 import org.springframework.data.domain.Page;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tahaberkamcadev.inventory_service.dto.Review;
 import com.tahaberkamcadev.inventory_service.entity.Product;
+import com.tahaberkamcadev.inventory_service.repository.projection.ProductSummary;
 
 @Service
 @Slf4j
@@ -23,12 +30,9 @@ public class ProductService {
 
     private final ProductRepository productRepository;
     private final Logger logger;
-
-
-    // update review summary(average rating, last 3 comments etc) kafka yaz
-
+    private final ObjectMapper objectMapper;
     
-
+    
     public Page<ProductSummary> getProductsByCategory(String category, int page, int size) {
         return productRepository.findByCategory(category, page, size);
     }
@@ -62,7 +66,9 @@ public class ProductService {
     }
 
     
-    // One of several approaches for setting stock to an specific value (instead of decrementing by quantity)
+    // Method for setting stock to a certain value (instead of increasing 
+    // or decrementing by quantity)
+    @Transactional
     public void setProductStock(UUID id, int quantity) {
 
         if (quantity < 0) {
@@ -80,7 +86,8 @@ public class ProductService {
     }
 
     // For purchase flow, when payment process begins. If payment fails, inventory service will listen 
-    // to the spesific event and revert the stock update via the incrementStock method 
+    // to the specific event and revert the stock update via the incrementStock method 
+    @Transactional
     public void decreaseStock(UUID productId) {
 
         Optional<Product> productOpt = productRepository.findById(productId);
@@ -98,6 +105,46 @@ public class ProductService {
 
     }
 
+    @Transactional
+    public void decreaseMultipleStock(List<UUID> productIds) {
+        for (UUID productId : productIds) {
+            decreaseStock(productId);
+        }
+    }
 
+    @Transactional
+    public void increaseStock(UUID productId) {
+        Optional<Product> productOpt = productRepository.findById(productId);
+        if (productOpt.isPresent()) {
+            Product product = productOpt.get();
+            product.setStock(product.getStock() + 1);
+            productRepository.save(product);
+            logger.info("Stock increased for product: " + product.getName());
+        } else {
+            throw new IllegalArgumentException("No such product exists: " + productId);
+        }
+    }
+
+    @Transactional
+    public void increaseMultipleStock(List<UUID> productIds) {
+        for (UUID productId : productIds) {
+            increaseStock(productId);
+        }
+    }
+
+    @Transactional
+    public void updateReviewSummary(UUID productId, BigDecimal averageRating, int totalReviews, List<Review> newReviews) {
+        Optional<Product> productOpt = productRepository.findById(productId);
+        if (productOpt.isPresent()) {
+            Product product = productOpt.get();
+            product.setAverageRating(averageRating);
+            product.setTotalReviews(totalReviews);
+            product.setReviewSummary(newReviews);
+            productRepository.save(product);
+            logger.info("Review summary updated for product: " + product.getName());
+        } else {
+            throw new IllegalArgumentException("No such product exists: " + productId);
+        }
+    }
 
 }

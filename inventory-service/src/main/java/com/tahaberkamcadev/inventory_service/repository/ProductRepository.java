@@ -22,6 +22,8 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
 
     Page<ProductSummary> findByBrand(String brand, int page, int size);
 
+    ProductSummary findSummaryById(UUID id);
+
     // A simple query like "apple computer"
     Page<ProductSummary> findByBrandAndCategoryProduct(String brand, String category, int page, int size);
 
