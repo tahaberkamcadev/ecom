@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent.OrderItem;
+import com.tahaberkamcadev.inventory_service.service.OutboxEventService;
 import com.tahaberkamcadev.inventory_service.service.ProcessedEventService;
 import com.tahaberkamcadev.inventory_service.service.ProductService;
 
@@ -28,11 +29,18 @@ public class ProductEventConsumer {
 
     private final ProductService productService;
     private final ProcessedEventService processedEventService;
+    private final OutboxEventService outboxEventService;
     private final Logger logger;
 
     @KafkaListener(topics = "product-stock-update", groupId = "inventory-service")
     @Transactional
     public void productStockUpdate(OrderEvent event) {
+
+
+
+        // Could implement a try-catch block to handle idempotency check on processed events table but since java exceptions are expensive,
+        // i prefer a simple if-else check to see if the event has already been processed or not. If it has, we log it and ignore it. If not,
+        // we process it and then mark it as processed in the database. 
 
 
         if (processedEventService.isEventProcessed(event.getEventId())) { // Idempotency check
@@ -49,22 +57,26 @@ public class ProductEventConsumer {
 
                 UUID itemId = event.getItems().get(0).getProductId();
                 productService.decreaseStock(itemId);
+                outboxEventService.saveOutboxEvent("Product Consume", itemId.toString(), event.toString(), "stock_updated");
                 processedEventService.markEventAsProcessed(event.getEventId(), "stock_updated");
 
             } else {
 
                 List<UUID> productIds = event.getItems().stream().map(OrderItem::getProductId).toList();
                 productService.decreaseMultipleStock(productIds);
+                outboxEventService.saveOutboxEvent("Multiple Product Consume", event.getOrderId().toString(), event.toString(), "stock_updated");
                 processedEventService.markEventAsProcessed(event.getEventId(), "stock_updated");
             }
         } else if("order_cancelled".equals(event.getEventType())) {
 
             List<UUID> productIds = event.getItems().stream().map(OrderItem::getProductId).toList();
             productService.increaseMultipleStock(productIds);
+            outboxEventService.saveOutboxEvent("Multiple Product Revert", event.getOrderId().toString(), event.toString(), "stock_reverted");
             processedEventService.markEventAsProcessed(event.getEventId(), "stock_reverted");
 
         } else {
             logger.warn("Unknown event type: " + event.getEventType());
+            return;
         }
     }
         
@@ -82,6 +94,7 @@ public class ProductEventConsumer {
 
         logger.info("Received review update message for product " + event.getProductId() + " with new average rating: " + event.getAverageRating());
         productService.updateReviewSummary(event.getProductId(), event.getAverageRating(), event.getTotalReviews(), event.getReviews());
+        outboxEventService.saveOutboxEvent("Review Update", event.getProductId().toString(), event.toString(), "review_updated");
         processedEventService.markEventAsProcessed(event.getEventId(), "review_updated");
 
         }
