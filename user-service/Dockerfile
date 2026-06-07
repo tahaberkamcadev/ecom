@@ -13,7 +13,7 @@ RUN sed -i 's/\r$//' mvnw && chmod +x mvnw
 RUN ./mvnw dependency:go-offline -B -q
 
 COPY src ./src
-RUN ./mvnw package -DskipTests -q
+RUN ./mvnw package -Dmaven.test.skip=true -q
 
 # Stage 2: Runtime
 FROM eclipse-temurin:21-jre-alpine

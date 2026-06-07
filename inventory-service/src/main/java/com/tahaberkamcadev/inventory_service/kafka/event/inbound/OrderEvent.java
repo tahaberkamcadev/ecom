@@ -1,6 +1,6 @@
 package com.tahaberkamcadev.inventory_service.kafka.event.inbound;
 
-import java.math.BigDecimal;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -21,13 +21,10 @@ public class OrderEvent {
     private Instant timestamp;
     private List<OrderItem> items;
 
-
-
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class OrderItem {
         private UUID productId;
         private int quantity;
-        private BigDecimal price;
-}
+    }
 }

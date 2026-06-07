@@ -37,5 +37,11 @@ public class ProcessedEvents {
     @Column(nullable = false)
     @Builder.Default
     private Instant processedAt = Instant.now();
-    
+
+    // @PrePersist
+    // private void prePersist() {
+    //     if (processedAt == null) {
+    //         processedAt = Instant.now();
+    //     }
+    // }
 }

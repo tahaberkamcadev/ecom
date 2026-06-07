@@ -7,70 +7,61 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import com.tahaberkamcadev.inventory_service.repository.projection.ProductSummary;
 
 import jakarta.transaction.Transactional;
 
-import org.slf4j.Logger;
-import org.springframework.data.domain.Page;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tahaberkamcadev.inventory_service.dto.Review;
+import com.tahaberkamcadev.inventory_service.dto.ItemPrice;
+import com.tahaberkamcadev.inventory_service.dto.OrderPriceResponse;
+import com.tahaberkamcadev.inventory_service.dto.ReviewSummary;
+import com.tahaberkamcadev.inventory_service.dto.StockAdjustment;
 import com.tahaberkamcadev.inventory_service.entity.Product;
-import com.tahaberkamcadev.inventory_service.repository.projection.ProductSummary;
+import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent.OrderItem;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class ProductService {
-    
-
     private final ProductRepository productRepository;
-    private final Logger logger;
-    private final ObjectMapper objectMapper;
-    
-    
-    public Page<ProductSummary> getProductsByCategory(String category, int page, int size) {
-        return productRepository.findByCategory(category, page, size);
-    }
-
-    public Page<ProductSummary> searchProducts(String query, int page, int size) {
-        return productRepository.findByNameContainingIgnoreCase(query, page, size);
-    }
-
-    public Optional<Product> getProductById(UUID id) {
-        return productRepository.findById(id);
-    }
 
     public void saveProduct(Product product) {
         productRepository.save(product);
-        logger.info("New product added: " + product.getName());
+        log.info("New product added: {}", product.getName());
+    }
+
+    public OrderPriceResponse getOrderPrice(List<OrderItem> orderItems) {
+        List<ItemPrice> itemPrices = new ArrayList<>();
+        BigDecimal totalPrice = BigDecimal.ZERO;
+        for (OrderItem orderItem : orderItems) {
+            Product product = productRepository.findById(orderItem.getProductId()).orElseThrow(() -> new IllegalArgumentException("Product not found: " + orderItem.getProductId()));
+            itemPrices.add(new ItemPrice(orderItem.getProductId(), product.getPrice()));
+            totalPrice = totalPrice.add(product.getPrice().multiply(BigDecimal.valueOf(orderItem.getQuantity())));
+        }
+        return OrderPriceResponse.builder()
+            .price(totalPrice)
+            .itemPrices(itemPrices)
+            .build();
     }
 
     public void deleteProduct(UUID id) {
         productRepository.deleteById(id);
-        logger.info("Product deleted: " + id);
+        log.info("Product deleted: {}", id);
     }
 
-    // For any change of product details
     public void updateProduct(Product product) {
         if (productRepository.existsById(product.getId())) {
             productRepository.save(product);
-            logger.info("Product updated: " + product.getName());
+            log.info("Product updated: {}", product.getName());
         } else {
             throw new IllegalArgumentException("No such product exists: " + product.getId());
         }
     }
 
-    
-    // Method for setting stock to a certain value (instead of increasing 
-    // or decrementing by quantity)
     @Transactional
     public void setProductStock(UUID id, int quantity) {
-
         if (quantity < 0) {
             throw new IllegalArgumentException("Stock cannot be negative: " + quantity);
         }
@@ -79,72 +70,99 @@ public class ProductService {
             Product product = productOpt.get();
             product.setStock(quantity);
             productRepository.save(product);
-            logger.info("Stock is set to: " + quantity + " for product: " + product.getName());
+            log.info("Stock set to {} for product {}", quantity, product.getName());
         } else {
             throw new IllegalArgumentException("No such product exists: " + id);
         }
     }
 
-    // For purchase flow, when payment process begins. If payment fails, inventory service will listen 
-    // to the specific event and revert the stock update via the incrementStock method 
     @Transactional
-    public void decreaseStock(UUID productId) {
-
+    public void decreaseStock(UUID productId, int quantity) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Stock decrease quantity must be positive: " + quantity);
+        }
         Optional<Product> productOpt = productRepository.findById(productId);
         if (productOpt.isPresent()) {
             Product product = productOpt.get();
-            if (product.getStock() == 0) {
+            if (product.getStock() < quantity) {
                 throw new IllegalStateException("Product out of stock: " + product.getName());
             }
-            product.setStock(product.getStock() - 1);
+            product.setStock(product.getStock() - quantity);
             productRepository.save(product);
-            logger.info("Stock decreased for product: " + product.getName());
+            log.info("Stock decreased by {} for product {}", quantity, product.getName());
         } else {
             throw new IllegalArgumentException("No such product exists: " + productId);
         }
-
     }
 
     @Transactional
-    public void decreaseMultipleStock(List<UUID> productIds) {
-        for (UUID productId : productIds) {
-            decreaseStock(productId);
+    public void decreaseMultipleStock(List<StockAdjustment> adjustments) {
+        for (StockAdjustment adjustment : adjustments) {
+            decreaseStock(adjustment.productId(), adjustment.quantity());
         }
     }
 
     @Transactional
-    public void increaseStock(UUID productId) {
+    public void increaseStock(UUID productId, int quantity) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Stock increase quantity must be positive: " + quantity);
+        }
         Optional<Product> productOpt = productRepository.findById(productId);
         if (productOpt.isPresent()) {
             Product product = productOpt.get();
-            product.setStock(product.getStock() + 1);
+            product.setStock(product.getStock() + quantity);
             productRepository.save(product);
-            logger.info("Stock increased for product: " + product.getName());
+            log.info("Stock increased by {} for product {}", quantity, product.getName());
         } else {
             throw new IllegalArgumentException("No such product exists: " + productId);
         }
     }
 
     @Transactional
-    public void increaseMultipleStock(List<UUID> productIds) {
-        for (UUID productId : productIds) {
-            increaseStock(productId);
+    public void increaseMultipleStock(List<StockAdjustment> adjustments) {
+        for (StockAdjustment adjustment : adjustments) {
+            increaseStock(adjustment.productId(), adjustment.quantity());
         }
     }
 
     @Transactional
-    public void updateReviewSummary(UUID productId, BigDecimal averageRating, int totalReviews, List<Review> newReviews) {
+    public void updateReviewSummary(UUID productId, ReviewSummary reviewSummary) {
+        if (productId == null) {
+            throw new IllegalArgumentException("productId cannot be null");
+        }
+        if (reviewSummary == null) {
+            throw new IllegalArgumentException("reviewSummary cannot be null");
+        }
         Optional<Product> productOpt = productRepository.findById(productId);
+
         if (productOpt.isPresent()) {
             Product product = productOpt.get();
-            product.setAverageRating(averageRating);
-            product.setTotalReviews(totalReviews);
-            product.setReviewSummary(newReviews);
+            List<ReviewSummary> reviews = product.getLatestReviews();
+            BigDecimal totalRating = product.getAverageRating();
+            if (reviews.size() >= 5) {
+            reviews.remove(0);
+            reviews.add(reviewSummary);
+            product.setAverageRating(totalRating);
+            product.setLatestReviews(reviews); 
+            } else {
+                reviews.add(reviewSummary);
+                product.setAverageRating(totalRating);
+                product.setLatestReviews(reviews);
+            }
             productRepository.save(product);
-            logger.info("Review summary updated for product: " + product.getName());
+            log.info("Review summary updated for product {}", product.getName());
         } else {
             throw new IllegalArgumentException("No such product exists: " + productId);
         }
     }
 
-}
+    // public OrderPriceResponse getOrderPrice(List<StockAdjustment> adjustments) {
+    //     BigDecimal totalPrice = BigDecimal.ZERO;
+    //     for (StockAdjustment adjustment : adjustments) {
+    //         Product product = productRepository.findById(adjustment.productId()).orElseThrow(() -> new IllegalArgumentException("No such product exists: " + adjustment.productId()));
+    //         totalPrice = totalPrice.add(product.getPrice().multiply(BigDecimal.valueOf(adjustment.quantity())));
+    //     }
+
+        
+    }
+

@@ -4,15 +4,18 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
-import com.tahaberkamcadev.inventory_service.dto.Review;
+import com.tahaberkamcadev.inventory_service.converter.ReviewSummaryListConverter;
 import com.tahaberkamcadev.inventory_service.dto.ProductCategory;
+import com.tahaberkamcadev.inventory_service.dto.ReviewSummary;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -32,6 +35,9 @@ public class Product {
     @GeneratedValue
     @Column(nullable = false, updatable = false)
     private UUID id;
+
+    @Version
+    private Long version;
 
     @Column(nullable = false)
     @Enumerated(jakarta.persistence.EnumType.STRING)
@@ -53,8 +59,8 @@ public class Product {
     @Column(nullable = false)
     private BigDecimal price;
 
-    @Column
-    private List<String> imageUrls;
+    @Column(nullable = false)
+    private boolean active;
 
     @Column
     private BigDecimal averageRating;
@@ -62,6 +68,8 @@ public class Product {
     @Column
     private int totalReviews;
 
-    @Column
-    private List<Review> reviewSummary;
+    @Convert(converter = ReviewSummaryListConverter.class)
+    @Column(columnDefinition = "text")
+    private List<ReviewSummary> latestReviews;
+
 }

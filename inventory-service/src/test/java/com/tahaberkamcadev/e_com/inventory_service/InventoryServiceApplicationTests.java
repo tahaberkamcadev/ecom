@@ -4,7 +4,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.TestPropertySource;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+import com.tahaberkamcadev.inventory_service.InventoryServiceApplication;
+
+@SpringBootTest(classes = InventoryServiceApplication.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @TestPropertySource(
         properties = {
             "spring.docker.compose.enabled=false",
@@ -18,6 +20,7 @@ import org.springframework.test.context.TestPropertySource;
             "spring.kafka.consumer.group-id=inventory-service",
             "spring.kafka.listener.auto-startup=false",
             "app.kafka.topics.reserve-request=saga.inventory.reserve.request",
+            "app.kafka.topics.review-request=saga.inventory.review.request",
             "app.kafka.topics.reserved=saga.inventory.reserved",
             "app.kafka.topics.reserve-failed=saga.inventory.reserve.failed",
             "app.kafka.topics.confirm-request=saga.inventory.confirm.request",
