@@ -25,6 +25,8 @@ import com.tahaberkamcadev.inventory_service.service.OutboxEventService;
 import com.tahaberkamcadev.inventory_service.service.ProcessedEventService;
 import com.tahaberkamcadev.inventory_service.service.ProductService;
 
+import tools.jackson.databind.ObjectMapper;
+
 @ExtendWith(MockitoExtension.class)
 class ProductEventConsumerTest {
 
@@ -48,11 +50,11 @@ class ProductEventConsumerTest {
     //     OrderEvent event = createEvent("order_created", 2);
     //     when(processedEventService.markIfNew(event.getEventId(), "stock_updated")).thenReturn(true);
 
-    //     consumer.productStockUpdate(event, ack);
+    //     consumer.productStockUpdate(toJson(event), ack);
 
     //     verify(productService).decreaseMultipleStock(argThat(adjustments ->
     //             adjustments.size() == 1 && adjustments.getFirst().quantity() == 2));
-    //     verify(outboxEventService).saveOutboxEvent(eq("Inventory"), eq(event.getOrderId().toString()), eq(event), eq("stock_updated"));
+    //     verify(outboxEventService).saveOutboxEvent(eq("Inventory"), eq(event.getOrderId()), eq(event.getCustomerId()), eq(event), eq("stock_updated"));
     //     verify(productService, never()).increaseMultipleStock(any());
     //     verify(ack).acknowledge();
     // }
@@ -62,10 +64,10 @@ class ProductEventConsumerTest {
         OrderEvent event = createEvent("order_created", 1);
         when(processedEventService.markIfNew(event.getEventId(), "stock_updated")).thenReturn(false);
 
-        consumer.productStockUpdate(event, ack);
+        consumer.productStockUpdate(toJson(event), ack);
 
         verify(productService, never()).decreaseMultipleStock(any());
-        verify(outboxEventService, never()).saveOutboxEvent(any(), any(), any(), any());
+        verify(outboxEventService, never()).saveOutboxEvent(any(), any(), any(), any(), any());
         verify(ack).acknowledge();
     }
 
@@ -73,17 +75,24 @@ class ProductEventConsumerTest {
     void productStockUpdate_shouldThrowForInvalidQuantity() {
         OrderEvent event = createEvent("order_created", 0);
 
-        assertThatThrownBy(() -> consumer.productStockUpdate(event, ack))
+        assertThatThrownBy(() -> consumer.productStockUpdate(toJson(event), ack))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("quantity must be positive");
         verify(ack, never()).acknowledge();
+    }
+
+    private String toJson(OrderEvent event) {
+        try {
+            return new ObjectMapper().writeValueAsString(event);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private OrderEvent createEvent(String eventType, int quantity) {
         OrderItem item = new OrderItem();
         item.setProductId(UUID.randomUUID());
         item.setQuantity(quantity);
-
 
         OrderEvent event = new OrderEvent();
         event.setEventId(UUID.randomUUID());

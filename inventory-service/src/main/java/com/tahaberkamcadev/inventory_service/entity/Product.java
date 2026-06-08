@@ -1,11 +1,9 @@
 package com.tahaberkamcadev.inventory_service.entity;
 
 import java.math.BigDecimal;
-import java.util.List;
 import java.util.UUID;
 
 import com.tahaberkamcadev.inventory_service.dto.ProductCategory;
-import com.tahaberkamcadev.inventory_service.dto.ReviewSummary;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -64,12 +62,13 @@ public class Product {
     private BigDecimal averageRating;
 
     @Column
-    private int totalReviews;
+    @Builder.Default
+    private Integer totalReviews = 0;
 
     // @Column(columnDefinition = "jsonb")
     // private List<ReviewSummary> latestReviews;
 
-    @Column(columnDefinition = "jsonb")
+    @Column(columnDefinition = "text")
     private String latestReviews;
 
 }

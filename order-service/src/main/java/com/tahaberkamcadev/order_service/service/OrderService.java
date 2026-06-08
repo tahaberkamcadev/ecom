@@ -28,15 +28,17 @@ public class OrderService {
     private final OrderRepository orderRepository;
 
 
-    public void createOrder(CreateOrderRequest request, UUID userId) {
+    public UUID createOrder(CreateOrderRequest request, UUID userId) {
+        ObjectMapper mapper = new ObjectMapper();
+        String itemsJson = mapper.writeValueAsString(request.items());
 
         Order order = Order.builder()
                 .userId(userId)
-                .orderItems(request.items())
+                .orderItems(itemsJson)
                 .status(OrderStatus.PENDING)
                 .build();
 
-        orderRepository.save(order);
+        return orderRepository.save(order).getId();
     }
 
     public void updatePriceInfo(InventoryEvent event) {
@@ -48,7 +50,8 @@ public class OrderService {
         Order order = orderRepository.findById(event.getOrderId())
                 .orElseThrow(() -> new RuntimeException("Order not found"));
 
-        List<OrderItem> orderItems = order.getOrderItems();
+        ObjectMapper mapper = new ObjectMapper();
+        List<OrderItem> orderItems = mapper.readValue(order.getOrderItems(), new TypeReference<List<OrderItem>>() {});
 
         List<ProductPrice> prices = deserializePayload(event);
 
@@ -62,8 +65,8 @@ public class OrderService {
         BigDecimal totalPrice = BigDecimal.ZERO;
         for (OrderItem item : orderItems) {
 
-            BigDecimal price = priceMap.get(item.productId());
-            totalPrice = totalPrice.add(price.multiply(BigDecimal.valueOf(item.quantity())));
+            BigDecimal price = priceMap.get(item.getProductId());
+            totalPrice = totalPrice.add(price.multiply(BigDecimal.valueOf(item.getQuantity())));
         }
 
     order.setTotalPrice(totalPrice);
@@ -90,9 +93,7 @@ public class OrderService {
         // I sent the price update info as a stringified Json, 
         // so this method is needed to deserialize it back to a list of ProductPrice objects
        
-        ObjectMapper objectMapper = new ObjectMapper();
-
-        return objectMapper.readValue(event.getPayload(),new TypeReference<List<ProductPrice>>() {});
+        return event.getItemPrices();
     }
 
 }

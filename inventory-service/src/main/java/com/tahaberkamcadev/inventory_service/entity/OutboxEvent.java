@@ -3,12 +3,9 @@ package com.tahaberkamcadev.inventory_service.entity;
 import java.time.Instant;
 import java.util.UUID;
 
-import com.tahaberkamcadev.inventory_service.dto.OrderPriceResponse;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
@@ -37,7 +34,7 @@ public class OutboxEvent {
     // @Column(columnDefinition = "jsonb")
     // private OrderPriceResponse payload;
 
-    @Column(columnDefinition = "jsonb")
+    @Column(columnDefinition = "text")
     private String payload;
 
     @Column(nullable = false)

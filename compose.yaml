@@ -38,6 +38,7 @@ services:
 
   postgres-order:
     image: postgres:17-alpine
+    command: ["postgres", "-c", "wal_level=logical"]
     environment:
       POSTGRES_DB: orderdb
       POSTGRES_USER: order
@@ -94,6 +95,8 @@ services:
         condition: service_healthy
       postgres-inventory:
         condition: service_healthy
+      postgres-payment:
+        condition: service_healthy
     ports:
       - "8083:8083"
     environment:
@@ -117,11 +120,20 @@ services:
       connect:
         condition: service_healthy
     volumes:
-      - ./inventory-service/docker/debezium:/debezium:ro
+      - ./inventory-service/docker/debezium:/debezium-inventory:ro
+      - ./order-service/docker/debezium:/debezium-order:ro
+      - ./payment-service/docker/debezium:/debezium-payment:ro
     command:
       - sh
       - -c
-      - curl -s -X PUT http://connect:8083/connectors/inventory-outbox-connector/config -H Content-Type:application/json --data @/debezium/inventory-outbox-connector.json && echo connector-ready
+      - |
+        curl -s -X PUT http://connect:8083/connectors/inventory-outbox-connector/config \
+          -H "Content-Type: application/json" --data @/debezium-inventory/inventory-outbox-connector.json &&
+        curl -s -X PUT http://connect:8083/connectors/order-outbox-connector/config \
+          -H "Content-Type: application/json" --data @/debezium-order/order-outbox-connector.json &&
+        curl -s -X PUT http://connect:8083/connectors/payment-outbox-connector/config \
+          -H "Content-Type: application/json" --data @/debezium-payment/payment-outbox-connector.json &&
+        echo connector-ready
 
   user-service:
     build:
@@ -185,6 +197,7 @@ services:
 
   postgres-payment:
     image: postgres:17-alpine
+    command: ["postgres", "-c", "wal_level=logical"]
     environment:
       POSTGRES_DB: paymentdb
       POSTGRES_USER: payment
@@ -208,6 +221,8 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      connect-init:
+        condition: service_completed_successfully
     ports:
       - "8084:8084"
     environment:

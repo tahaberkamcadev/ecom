@@ -19,39 +19,47 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @RequiredArgsConstructor
 public class PaymentEventConsumer {
-    
 
     private final PaymentService paymentService;
     private final OutboxEventService outboxEventService;
     private final ProcessedEventService processedEventService;
 
-    @KafkaListener(topics = "stock.reserved", groupId = "payment-service-group")
+    @KafkaListener(topics = "saga.inventory.stock_updated", groupId = "${spring.kafka.consumer.group-id}")
     @Transactional
-    public void consumeInventoryEvent(@Payload InventoryEvent event, Acknowledgment ack) {
+    public void consumeInventoryEvent(@Payload String payload, Acknowledgment ack) {
+        InventoryEvent event;
+        try {
+            event = new tools.jackson.databind.ObjectMapper().readValue(payload, InventoryEvent.class);
+        } catch (Exception e) {
+            log.error("Failed to deserialize InventoryEvent: {}", payload, e);
+            ack.acknowledge();
+            return;
+        }
 
         if (event.getEventId() == null || event.getOrderId() == null || event.getAggregateType() == null) {
-        throw new IllegalArgumentException("Received invalid InventoryEvent: " + event);
-    }
-        if (processedEventService.markIfNew(event.getEventId(), event.getEventType())) {
+            throw new IllegalArgumentException("Received invalid InventoryEvent: " + event);
+        }
 
+        if (processedEventService.markIfNew(event.getEventId(), event.getEventType())) {
             Payment payment = Payment.builder()
                 .orderId(event.getOrderId())
                 .paymentMethod("Visa")
                 .status("PENDING")
-                .amount(event.getPayload().getTotalAmount())
+                .amount(event.getTotalAmount())
                 .build();
-                
+
             payment.setStatus(paymentService.mockPaymentProcessing(payment));
             paymentService.createPayment(payment);
             outboxEventService.saveOutboxEvent(
+                event.getOrderId(),
                 event.getCustomerId(),
-                "payment." + payment.getStatus()
+                payment.getStatus()
             );
+            log.info("Payment {} for order {}", payment.getStatus(), event.getOrderId());
             ack.acknowledge();
         } else {
             log.info("Duplicate event received: {} - {}", event.getEventType(), event.getEventId());
+            ack.acknowledge();
         }
-        ack.acknowledge();
     }
 }
-

@@ -1,11 +1,7 @@
 package com.tahaberkamcadev.payment_service.kafka.event.inbound;
 
 import java.math.BigDecimal;
-import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
-
-import com.tahaberkamcadev.payment_service.dto.ItemPrice;
 
 import lombok.Data;
 
@@ -19,18 +15,9 @@ public class InventoryEvent {
 
     private UUID orderId;
     
-    private String aggregateType; // e.g. "Order"
+    private String aggregateType; // e.g. "Inventory"
 
-    private String eventType; // e.g. "OrderCreated"
+    private String eventType; // e.g. "stock_updated"
 
-    private Payload payload; // JSON string containing the event data (List<ItemPrice>)
-
-    private Instant createdAt;
-
-    @Data
-    public static class Payload {
-        private UUID orderId;
-        private BigDecimal totalAmount;
-        private List<ItemPrice> items;
-    }
+    private BigDecimal totalAmount;
 }

@@ -35,7 +35,10 @@ public class OutboxEvent {
     private UUID customerId;
 
     @Column(name = "event_type")
-    private String eventType; // "order_created" or "order_cancelled"
+    private String eventType;
+
+    @Column(name = "payload", columnDefinition = "text")
+    private String payload;
 
     @Column(name = "timestamp")
     @Builder.Default

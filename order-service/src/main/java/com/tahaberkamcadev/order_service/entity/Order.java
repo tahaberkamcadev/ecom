@@ -2,13 +2,8 @@ package com.tahaberkamcadev.order_service.entity;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
-import com.tahaberkamcadev.order_service.dto.OrderItem;
 import com.tahaberkamcadev.order_service.dto.OrderStatus;
 
 import jakarta.persistence.Column;
@@ -42,9 +37,8 @@ public class Order {
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "order_items", nullable = false, columnDefinition = "jsonb")
-    private List<OrderItem> orderItems;
+    @Column(name = "order_items", nullable = false, columnDefinition = "text")
+    private String orderItems;
 
     @Column(name = "total_price", nullable = false)
     @Builder.Default

@@ -32,7 +32,17 @@ public class ProductEventConsumer {
 
     @KafkaListener(topics = "${app.kafka.topics.reserve-request}", groupId = "${spring.kafka.consumer.group-id}")
     @Transactional
-    public void productStockUpdate(@Payload OrderEvent event, Acknowledgment ack) {
+    public void productStockUpdate(@Payload String payload, Acknowledgment ack) {
+        OrderEvent event;
+        try {
+            ObjectMapper objectMapper = new ObjectMapper();
+            event = objectMapper.readValue(payload, OrderEvent.class);
+        } catch (Exception e) {
+            log.error("Failed to deserialize OrderEvent: {}", payload, e);
+            ack.acknowledge();
+            return;
+        }
+
         if (event.getEventId() == null) {
             throw new IllegalArgumentException("eventId cannot be null");
         }
@@ -52,7 +62,7 @@ public class ProductEventConsumer {
         if ("order_created".equals(event.getEventType())) {
             if (processedEventService.markIfNew(event.getEventId(), "stock_updated")) {
                 productService.decreaseMultipleStock(adjustments);
-                outboxEventService.saveOutboxEvent("Inventory", event.getOrderId(), event, "stock_updated");
+                outboxEventService.saveOutboxEvent("Inventory", event.getOrderId(), event.getCustomerId(), event, "stock_updated");
             } else {
                 log.info("Duplicate stock update event received, ignoring. Event ID: {}", event.getEventId());
             }
@@ -63,7 +73,7 @@ public class ProductEventConsumer {
         if ("order_cancelled".equals(event.getEventType())) {
             if (processedEventService.markIfNew(event.getEventId(), "stock_reverted")) {
                 productService.increaseMultipleStock(adjustments);
-                outboxEventService.saveOutboxEvent("Inventory", event.getOrderId(), event, "stock_reverted");
+                outboxEventService.saveOutboxEvent("Inventory", event.getOrderId(), event.getCustomerId(), event, "stock_reverted");
             } else {
                 log.info("Duplicate stock update event received, ignoring. Event ID: {}", event.getEventId());
             }
@@ -77,7 +87,16 @@ public class ProductEventConsumer {
 
     @KafkaListener(topics = "${app.kafka.topics.review-request}", groupId = "${spring.kafka.consumer.group-id}")
     @Transactional
-    public void productReviewUpdate(@Payload ReviewEvent event, Acknowledgment ack) {
+    public void productReviewUpdate(@Payload String payload, Acknowledgment ack) {
+        ReviewEvent event;
+        try {
+            ObjectMapper objectMapper = new ObjectMapper();
+            event = objectMapper.readValue(payload, ReviewEvent.class);
+        } catch (Exception e) {
+            log.error("Failed to deserialize ReviewEvent: {}", payload, e);
+            ack.acknowledge();
+            return;
+        }
         if (event.getEventId() == null) {
             throw new IllegalArgumentException("eventId cannot be null");
         }
