@@ -12,6 +12,7 @@ import com.tahaberkamcadev.inventory_service.repository.ProductRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import tools.jackson.databind.ObjectMapper;
 
 import com.tahaberkamcadev.inventory_service.dto.ItemPrice;
 import com.tahaberkamcadev.inventory_service.dto.OrderPriceResponse;
@@ -31,14 +32,18 @@ public class OutboxEventService {
 
     @Transactional
     public void saveOutboxEvent(String aggregateType, UUID orderId, OrderEvent event, String eventType) {
-        // String itemPricesJson = toJson(getOrderPrice(event));
+        
+
+        ObjectMapper mapper = new ObjectMapper();
+        String payload = mapper.writeValueAsString(OrderPriceResponse.builder()
+                    .orderId(orderId)
+                    .itemPrices(getOrderPrice(event))
+                    .build());
+
         outboxEventRepository.save(
             OutboxEvent.builder()
                 .aggregateType(aggregateType)
-                .payload(OrderPriceResponse.builder()
-                    .orderId(orderId)
-                    .itemPrices(getOrderPrice(event))
-                    .build()) // List<ItemPrice> type for payment service 
+                .payload(payload)
                 .eventType(eventType)
                 .build()
         );
@@ -46,7 +51,7 @@ public class OutboxEventService {
     }
 
     @Transactional
-    public void saveOutboxReviewEvent(String aggregateType, String aggregateId, ReviewEvent event, String eventType) {
+    public void saveOutboxReviewEvent(String aggregateType, String aggregateId, String eventType) {
 
         outboxEventRepository.save(
             OutboxEvent.builder()

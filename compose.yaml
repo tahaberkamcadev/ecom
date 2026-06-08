@@ -183,7 +183,44 @@ services:
       SPRING_KAFKA_CONSUMER_GROUP_ID: order-service
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
 
+  postgres-payment:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: paymentdb
+      POSTGRES_USER: payment
+      POSTGRES_PASSWORD: payment
+    ports:
+      - "5436:5432"
+    volumes:
+      - payment_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payment -d paymentdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  payment-service:
+    build:
+      context: ./payment-service
+      dockerfile: Dockerfile
+    depends_on:
+      postgres-payment:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8084:8084"
+    environment:
+      SERVER_PORT: 8084
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-payment:5432/paymentdb
+      SPRING_DATASOURCE_USERNAME: payment
+      SPRING_DATASOURCE_PASSWORD: payment
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_KAFKA_CONSUMER_GROUP_ID: payment-service
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+
 volumes:
   user_pg:
   inventory_pg:
   order_pg:
+  payment_pg:

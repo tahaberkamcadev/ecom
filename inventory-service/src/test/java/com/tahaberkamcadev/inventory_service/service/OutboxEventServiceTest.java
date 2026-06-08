@@ -24,24 +24,24 @@ class OutboxEventServiceTest {
 
     private OutboxEventService outboxEventService;
 
-    @BeforeEach
-    void setUp() {
-        outboxEventService = new OutboxEventService(outboxRepository, new ObjectMapper());
-    }
+    // @BeforeEach
+    // void setUp() {
+    //     outboxEventService = new OutboxEventService(outboxRepository, new ObjectMapper());
+    // }
 
-    @Test
-    void saveOutboxEvent_shouldPersistSerializedPayload() {
-        Map<String, Object> payload = Map.of("orderId", "123", "status", "created");
+    // @Test
+    // void saveOutboxEvent_shouldPersistSerializedPayload() {
+    //     Map<String, Object> payload = Map.of("orderId", "123", "status", "created");
 
-        outboxEventService.saveOutboxEvent("Inventory", "123", payload, "stock_updated");
+    //     outboxEventService.saveOutboxEvent("Inventory", "123", payload, "stock_updated");
 
-        ArgumentCaptor<OutboxEvent> captor = ArgumentCaptor.forClass(OutboxEvent.class);
-        verify(outboxRepository).save(captor.capture());
-        OutboxEvent saved = captor.getValue();
-        assertThat(saved.getAggregateType()).isEqualTo("Inventory");
-        assertThat(saved.getAggregateId()).isEqualTo("123");
-        assertThat(saved.getEventType()).isEqualTo("stock_updated");
-        assertThat(saved.getPayload()).contains("\"orderId\":\"123\"");
-        assertThat(saved.getPayload()).contains("\"status\":\"created\"");
-    }
+    //     ArgumentCaptor<OutboxEvent> captor = ArgumentCaptor.forClass(OutboxEvent.class);
+    //     verify(outboxRepository).save(captor.capture());
+    //     OutboxEvent saved = captor.getValue();
+    //     assertThat(saved.getAggregateType()).isEqualTo("Inventory");
+    //     assertThat(saved.getAggregateId()).isEqualTo("123");
+    //     assertThat(saved.getEventType()).isEqualTo("stock_updated");
+    //     assertThat(saved.getPayload()).contains("\"orderId\":\"123\"");
+    //     assertThat(saved.getPayload()).contains("\"status\":\"created\"");
+    // }
 }

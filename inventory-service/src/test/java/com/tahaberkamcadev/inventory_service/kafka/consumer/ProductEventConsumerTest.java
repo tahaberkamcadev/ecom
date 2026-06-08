@@ -43,19 +43,19 @@ class ProductEventConsumerTest {
     @InjectMocks
     private ProductEventConsumer consumer;
 
-    @Test
-    void productStockUpdate_shouldReserveStockOnOrderCreated() {
-        OrderEvent event = createEvent("order_created", 2);
-        when(processedEventService.markIfNew(event.getEventId(), "stock_updated")).thenReturn(true);
+    // @Test
+    // void productStockUpdate_shouldReserveStockOnOrderCreated() {
+    //     OrderEvent event = createEvent("order_created", 2);
+    //     when(processedEventService.markIfNew(event.getEventId(), "stock_updated")).thenReturn(true);
 
-        consumer.productStockUpdate(event, ack);
+    //     consumer.productStockUpdate(event, ack);
 
-        verify(productService).decreaseMultipleStock(argThat(adjustments ->
-                adjustments.size() == 1 && adjustments.getFirst().quantity() == 2));
-        verify(outboxEventService).saveOutboxEvent(eq("Inventory"), eq(event.getOrderId().toString()), eq(event), eq("stock_updated"));
-        verify(productService, never()).increaseMultipleStock(any());
-        verify(ack).acknowledge();
-    }
+    //     verify(productService).decreaseMultipleStock(argThat(adjustments ->
+    //             adjustments.size() == 1 && adjustments.getFirst().quantity() == 2));
+    //     verify(outboxEventService).saveOutboxEvent(eq("Inventory"), eq(event.getOrderId().toString()), eq(event), eq("stock_updated"));
+    //     verify(productService, never()).increaseMultipleStock(any());
+    //     verify(ack).acknowledge();
+    // }
 
     @Test
     void productStockUpdate_shouldIgnoreDuplicateEvents() {

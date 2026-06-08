@@ -5,9 +5,12 @@ import com.tahaberkamcadev.inventory_service.repository.ProductRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -137,18 +140,30 @@ public class ProductService {
 
         if (productOpt.isPresent()) {
             Product product = productOpt.get();
-            List<ReviewSummary> reviews = product.getLatestReviews();
+
+            ObjectMapper mapper = new ObjectMapper();
+
+            // Ternary operator to handle null case for latestReviews
+            String raw = product.getLatestReviews();
+            List<ReviewSummary> reviews = (raw != null) ? 
+            mapper.readValue(raw, new TypeReference<List<ReviewSummary>>(){})
+            : Collections.emptyList();
+            
             BigDecimal totalRating = product.getAverageRating();
+
             if (reviews.size() >= 5) {
             reviews.remove(0);
             reviews.add(reviewSummary);
             product.setAverageRating(totalRating);
-            product.setLatestReviews(reviews); 
+            String reviewsString = mapper.writeValueAsString(reviewSummary);
+            product.setLatestReviews(reviewsString); 
             } else {
                 reviews.add(reviewSummary);
                 product.setAverageRating(totalRating);
-                product.setLatestReviews(reviews);
+                String reviewsString = mapper.writeValueAsString(reviewSummary);
+                product.setLatestReviews(reviewsString);
             }
+            
             productRepository.save(product);
             log.info("Review summary updated for product {}", product.getName());
         } else {

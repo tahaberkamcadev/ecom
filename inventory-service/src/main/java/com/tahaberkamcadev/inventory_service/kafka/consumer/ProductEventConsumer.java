@@ -19,6 +19,7 @@ import com.tahaberkamcadev.inventory_service.dto.StockAdjustment;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import tools.jackson.databind.ObjectMapper;
 
 @Component
 @Slf4j
@@ -95,8 +96,9 @@ public class ProductEventConsumer {
 
         if (processedEventService.markIfNew(event.getEventId(), "review_added")) {
             ReviewSummary reviewSummary = toReviewSummary(event);
+            
             productService.updateReviewSummary(event.getProductId(), reviewSummary);
-            outboxEventService.saveOutboxReviewEvent("Inventory", event.getProductId().toString(), event, "review_added");
+            outboxEventService.saveOutboxReviewEvent("Inventory", event.getProductId().toString(), "review_added");
         } else {
             log.info("Duplicate review event received, ignoring. Event ID: {}", event.getEventId());
         }
