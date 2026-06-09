@@ -61,8 +61,13 @@ public class ProductEventConsumer {
 
         if ("order_created".equals(event.getEventType())) {
             if (processedEventService.markIfNew(event.getEventId(), "stock_updated")) {
-                productService.decreaseMultipleStock(adjustments);
-                outboxEventService.saveOutboxEvent("Inventory", event.getOrderId(), event.getCustomerId(), event, "stock_updated");
+                boolean reserved = productService.tryDecreaseMultipleStock(adjustments);
+                if (reserved) {
+                    outboxEventService.saveOutboxEvent("Inventory", event.getOrderId(), event.getCustomerId(), event, "stock_updated");
+                } else {
+                    log.warn("Insufficient stock for order {}", event.getOrderId());
+                    outboxEventService.saveOutboxStockFailedEvent("Inventory", event.getOrderId(), event.getCustomerId());
+                }
             } else {
                 log.info("Duplicate stock update event received, ignoring. Event ID: {}", event.getEventId());
             }

@@ -89,6 +89,13 @@ public class OrderService {
         orderRepository.save(order);
     }
 
+    public List<OrderItem> getOrderItems(UUID orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
+        ObjectMapper mapper = new ObjectMapper();
+        return mapper.readValue(order.getOrderItems(), new TypeReference<List<OrderItem>>() {});
+    }
+
     public List<ProductPrice> deserializePayload(InventoryEvent event) { 
         // I sent the price update info as a stringified Json, 
         // so this method is needed to deserialize it back to a list of ProductPrice objects

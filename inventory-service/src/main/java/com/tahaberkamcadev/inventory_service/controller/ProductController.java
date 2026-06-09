@@ -3,7 +3,6 @@ package com.tahaberkamcadev.inventory_service.controller;
 import java.util.List;
 
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -34,7 +33,7 @@ public class ProductController {
     // When client is about to checkout, we cant afford eventually consistent read model to serve stale
     // data. So at the edge of purchase, client is making sure of price data is up to date.
     // More details in architecture decision record on readme.md file.
-    @GetMapping("/checkout")
+    @PostMapping("/checkout")
     public ResponseEntity<OrderPriceResponse> getOrderPrice(@RequestBody List<OrderItem> orderItems) {
         OrderPriceResponse response = productService.getOrderPrice(orderItems);
         return ResponseEntity.ok(response);

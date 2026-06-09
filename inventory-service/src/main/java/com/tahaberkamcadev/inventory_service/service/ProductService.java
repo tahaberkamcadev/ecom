@@ -106,6 +106,20 @@ public class ProductService {
     }
 
     @Transactional
+    public boolean tryDecreaseMultipleStock(List<StockAdjustment> adjustments) {
+        for (StockAdjustment adjustment : adjustments) {
+            Product product = productRepository.findById(adjustment.productId()).orElse(null);
+            if (product == null || product.getStock() < adjustment.quantity()) {
+                return false;
+            }
+        }
+        for (StockAdjustment adjustment : adjustments) {
+            decreaseStock(adjustment.productId(), adjustment.quantity());
+        }
+        return true;
+    }
+
+    @Transactional
     public void increaseStock(UUID productId, int quantity) {
         if (quantity <= 0) {
             throw new IllegalArgumentException("Stock increase quantity must be positive: " + quantity);

@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.tahaberkamcadev.inventory_service.repository.ProcessedEventRepository;
 
@@ -15,6 +16,7 @@ public class ProcessedEventService {
 
     private final ProcessedEventRepository processedEventRepository;
 
+    @Transactional
     public boolean markIfNew(UUID eventId, String eventType) {
         return processedEventRepository.insertIfAbsent(eventId, eventType, Instant.now()) > 0;
     }

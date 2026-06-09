@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -67,6 +68,20 @@ class ProductEventConsumerTest {
         consumer.productStockUpdate(toJson(event), ack);
 
         verify(productService, never()).decreaseMultipleStock(any());
+        verify(outboxEventService, never()).saveOutboxEvent(any(), any(), any(), any(), any());
+        verify(ack).acknowledge();
+    }
+
+    @Test
+    void productStockUpdate_shouldPublishStockFailedOnInsufficientStock() {
+        OrderEvent event = createEvent("order_created", 5);
+        when(processedEventService.markIfNew(event.getEventId(), "stock_updated")).thenReturn(true);
+        doThrow(new IllegalStateException("Product out of stock"))
+                .when(productService).decreaseMultipleStock(any());
+
+        consumer.productStockUpdate(toJson(event), ack);
+
+        verify(outboxEventService).saveOutboxStockFailedEvent(eq("Inventory"), eq(event.getOrderId()), eq(event.getCustomerId()));
         verify(outboxEventService, never()).saveOutboxEvent(any(), any(), any(), any(), any());
         verify(ack).acknowledge();
     }

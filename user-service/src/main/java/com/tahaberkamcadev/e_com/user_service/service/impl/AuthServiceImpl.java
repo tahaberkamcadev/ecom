@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -68,7 +69,11 @@ public class AuthServiceImpl implements AuthService {
         );
         eventPublishingService.publishUserCreated(userCreatedEvent);
 
-        String token = jwtService.generateToken(savedUser);
+        Map<String, Object> claims = Map.of(
+                "userId", savedUser.getId().toString(),
+                "role", savedUser.getRole().name()
+        );
+        String token = jwtService.generateToken(claims, savedUser);
         return AuthResponse.of(token, jwtService.getExpirationTime());
     }
 
@@ -91,7 +96,11 @@ public class AuthServiceImpl implements AuthService {
 
         log.info("User logged in with id: {} (total logins: {})", updatedUser.getId(), updatedUser.getLoginCount());
 
-        String token = jwtService.generateToken(updatedUser);
+        Map<String, Object> claims = Map.of(
+                "userId", updatedUser.getId().toString(),
+                "role", updatedUser.getRole().name()
+        );
+        String token = jwtService.generateToken(claims, updatedUser);
         return AuthResponse.of(token, jwtService.getExpirationTime());
     }
 

@@ -9,6 +9,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.tahaberkamcadev.inventory_service.dto.ItemPrice;
 import com.tahaberkamcadev.inventory_service.entity.OutboxEvent;
@@ -18,7 +19,6 @@ import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent.Orde
 import com.tahaberkamcadev.inventory_service.repository.OutboxRepository;
 import com.tahaberkamcadev.inventory_service.repository.ProductRepository;
 
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import tools.jackson.databind.ObjectMapper;
@@ -30,6 +30,28 @@ public class OutboxEventService {
 
     private final OutboxRepository outboxEventRepository;
     private final ProductRepository productRepository;
+
+    @Transactional
+    public void saveOutboxStockFailedEvent(String aggregateType, UUID orderId, UUID customerId) {
+        Map<String, Object> payloadData = new HashMap<>();
+        payloadData.put("eventId", UUID.randomUUID());
+        payloadData.put("orderId", orderId);
+        payloadData.put("customerId", customerId);
+        payloadData.put("eventType", "stock_failed");
+        payloadData.put("aggregateType", aggregateType);
+
+        ObjectMapper mapper = new ObjectMapper();
+        String payload = mapper.writeValueAsString(payloadData);
+
+        outboxEventRepository.save(
+            OutboxEvent.builder()
+                .aggregateType(aggregateType)
+                .payload(payload)
+                .eventType("stock_failed")
+                .build()
+        );
+        log.info("Stock failed outbox event saved for order {}", orderId);
+    }
 
     @Transactional
     public void saveOutboxEvent(String aggregateType, UUID orderId, UUID customerId, OrderEvent event, String eventType) {

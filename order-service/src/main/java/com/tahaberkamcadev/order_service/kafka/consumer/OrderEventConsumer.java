@@ -5,11 +5,15 @@ import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
+import com.tahaberkamcadev.order_service.dto.OrderItem;
 import com.tahaberkamcadev.order_service.dto.OrderStatus;
 import com.tahaberkamcadev.order_service.kafka.event.inbound.InventoryEvent;
 import com.tahaberkamcadev.order_service.kafka.event.inbound.PaymentEvent;
 import com.tahaberkamcadev.order_service.service.OrderService;
+import com.tahaberkamcadev.order_service.service.OutboxEventService;
 import com.tahaberkamcadev.order_service.service.ProcessedEventService;
+
+import java.util.List;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +27,7 @@ public class OrderEventConsumer {
 
     private final OrderService orderService;
     private final ProcessedEventService processedEventService;
+    private final OutboxEventService outboxEventService;
 
     @KafkaListener(topics = "saga.inventory.stock_updated", groupId = "${spring.kafka.consumer.group-id}")
     @Transactional
@@ -95,7 +100,9 @@ public class OrderEventConsumer {
 
         if (processedEventService.markIfNew(event.getEventId(), "payment_failed")) {
             orderService.updateOrderStatus(event.getOrderId(), OrderStatus.CANCELLED);
-            log.info("Order cancelled.");
+            List<OrderItem> items = orderService.getOrderItems(event.getOrderId());
+            outboxEventService.saveOutboxEvent(event.getOrderId(), event.getCustomerId(), "order_cancelled", items);
+            log.info("Order {} cancelled, stock rollback event published.", event.getOrderId());
         } else {
             log.info("Duplicate payment failed event received, ignoring. Event ID: {}", event.getEventId());
         }
