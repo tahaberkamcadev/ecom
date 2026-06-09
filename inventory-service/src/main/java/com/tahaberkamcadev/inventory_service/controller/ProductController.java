@@ -31,7 +31,7 @@ public class ProductController {
 
     // This endpoint is necessary for the fact that i used projection based CQRS pattern for the system.
     // When client is about to checkout, we cant afford eventually consistent read model to serve stale
-    // data. So at the edge of purchase, client is making sure of price data is up to date.
+    // data. So right before the purchase, client is making sure of price data is up to date.
     // More details in architecture decision record on readme.md file.
     @PostMapping("/checkout")
     public ResponseEntity<OrderPriceResponse> getOrderPrice(@RequestBody List<OrderItem> orderItems) {

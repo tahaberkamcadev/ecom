@@ -12,7 +12,7 @@ class OutboxEventServiceTest {
     @Mock
     private OutboxRepository outboxRepository;
 
-    private OutboxEventService outboxEventService;
+    // private OutboxEventService outboxEventService;
 
     // @BeforeEach
     // void setUp() {

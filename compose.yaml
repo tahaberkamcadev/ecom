@@ -2,9 +2,9 @@ services:
   postgres-user:
     image: postgres:17-alpine
     environment:
-      POSTGRES_DB: userservicedb
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: ${USER_DB_NAME}
+      POSTGRES_USER: ${USER_DB_USER}
+      POSTGRES_PASSWORD: ${USER_DB_PASSWORD}
     ports:
       - "5433:5432"
     volumes:
@@ -19,9 +19,9 @@ services:
     image: postgres:17-alpine
     command: ["postgres", "-c", "wal_level=logical"]
     environment:
-      POSTGRES_DB: inventorydb
-      POSTGRES_USER: inventory
-      POSTGRES_PASSWORD: inventory
+      POSTGRES_DB: ${INVENTORY_DB_NAME}
+      POSTGRES_USER: ${INVENTORY_DB_USER}
+      POSTGRES_PASSWORD: ${INVENTORY_DB_PASSWORD}
     ports:
       - "5434:5432"
     networks:
@@ -40,9 +40,9 @@ services:
     image: postgres:17-alpine
     command: ["postgres", "-c", "wal_level=logical"]
     environment:
-      POSTGRES_DB: orderdb
-      POSTGRES_USER: order
-      POSTGRES_PASSWORD: order
+      POSTGRES_DB: ${ORDER_DB_NAME}
+      POSTGRES_USER: ${ORDER_DB_USER}
+      POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD}
     ports:
       - "5435:5432"
     volumes:
@@ -146,9 +146,9 @@ services:
       - "8081:8081"
     environment:
       SERVER_PORT: 8081
-      DB_URL: jdbc:postgresql://postgres-user:5432/userservicedb
-      DB_USERNAME: myuser
-      DB_PASSWORD: secret
+      DB_URL: jdbc:postgresql://postgres-user:5432/${USER_DB_NAME}
+      DB_USERNAME: ${USER_DB_USER}
+      DB_PASSWORD: ${USER_DB_PASSWORD}
       KAFKA_ENABLED: "false"
       EVENTS_ENABLED: "false"
 
@@ -167,9 +167,9 @@ services:
       - "8082:8082"
     environment:
       SERVER_PORT: 8082
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-inventory:5432/inventorydb
-      SPRING_DATASOURCE_USERNAME: inventory
-      SPRING_DATASOURCE_PASSWORD: inventory
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-inventory:5432/${INVENTORY_DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${INVENTORY_DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${INVENTORY_DB_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_KAFKA_CONSUMER_GROUP_ID: inventory-service
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
@@ -188,9 +188,9 @@ services:
     environment:
       SERVER_PORT: 8083
       SPRING_DOCKER_COMPOSE_ENABLED: "false"
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-order:5432/orderdb
-      SPRING_DATASOURCE_USERNAME: order
-      SPRING_DATASOURCE_PASSWORD: order
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-order:5432/${ORDER_DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${ORDER_DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${ORDER_DB_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_KAFKA_CONSUMER_GROUP_ID: order-service
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
@@ -199,9 +199,9 @@ services:
     image: postgres:17-alpine
     command: ["postgres", "-c", "wal_level=logical"]
     environment:
-      POSTGRES_DB: paymentdb
-      POSTGRES_USER: payment
-      POSTGRES_PASSWORD: payment
+      POSTGRES_DB: ${PAYMENT_DB_NAME}
+      POSTGRES_USER: ${PAYMENT_DB_USER}
+      POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD}
     ports:
       - "5436:5432"
     volumes:
@@ -227,9 +227,9 @@ services:
       - "8084:8084"
     environment:
       SERVER_PORT: 8084
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-payment:5432/paymentdb
-      SPRING_DATASOURCE_USERNAME: payment
-      SPRING_DATASOURCE_PASSWORD: payment
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-payment:5432/${PAYMENT_DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${PAYMENT_DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${PAYMENT_DB_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_KAFKA_CONSUMER_GROUP_ID: payment-service
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
@@ -255,7 +255,7 @@ services:
       INVENTORY_SERVICE_URL: http://inventory-service:8082
       ORDER_SERVICE_URL: http://order-service:8083
       PAYMENT_SERVICE_URL: http://payment-service:8084
-      JWT_SECRET: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+      JWT_SECRET: ${JWT_SECRET}
 
 volumes:
   user_pg:
