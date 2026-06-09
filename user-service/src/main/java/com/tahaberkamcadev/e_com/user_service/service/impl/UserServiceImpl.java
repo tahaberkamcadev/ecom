@@ -4,13 +4,11 @@ import com.tahaberkamcadev.e_com.user_service.dto.request.ChangePasswordRequest;
 import com.tahaberkamcadev.e_com.user_service.dto.request.UpdateUserRequest;
 import com.tahaberkamcadev.e_com.user_service.dto.request.UpdateUserPreferencesRequest;
 import com.tahaberkamcadev.e_com.user_service.dto.response.UserResponse;
-import com.tahaberkamcadev.e_com.user_service.event.UserEvent;
 import com.tahaberkamcadev.e_com.user_service.exception.UnauthorizedAccessException;
 import com.tahaberkamcadev.e_com.user_service.exception.UserNotFoundException;
 import com.tahaberkamcadev.e_com.user_service.model.Role;
 import com.tahaberkamcadev.e_com.user_service.model.User;
 import com.tahaberkamcadev.e_com.user_service.repository.UserRepository;
-import com.tahaberkamcadev.e_com.user_service.service.EventPublishingService;
 import com.tahaberkamcadev.e_com.user_service.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,7 +19,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -44,7 +41,6 @@ public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final EventPublishingService eventPublishingService;
 
     @Override
     @Transactional(readOnly = true)
@@ -143,18 +139,6 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new UserNotFoundException(id));
         
         userRepository.delete(user);
-        
-        // Publish user deletion event for SAGA pattern consistency
-        UserEvent deleteEvent = UserEvent.builder()
-                .userId(user.getId())
-                .email(user.getEmail())
-                .eventType("USER_DELETED")
-                .eventSource("user-service")
-                .timestamp(LocalDateTime.now())
-                .correlationId(UUID.randomUUID())
-                .build();
-        eventPublishingService.publishUserDeleted(deleteEvent);
-        
         log.info("User deleted with id: {}", id);
     }
 

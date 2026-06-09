@@ -4,9 +4,6 @@ import com.tahaberkamcadev.e_com.user_service.dto.request.LoginRequest;
 import com.tahaberkamcadev.e_com.user_service.dto.request.RegisterRequest;
 import com.tahaberkamcadev.e_com.user_service.dto.request.VerifyEmailRequest;
 import com.tahaberkamcadev.e_com.user_service.dto.response.AuthResponse;
-import com.tahaberkamcadev.e_com.user_service.dto.response.UserResponse;
-import com.tahaberkamcadev.e_com.user_service.event.UserEvent;
-import com.tahaberkamcadev.e_com.user_service.service.EventPublishingService;
 import com.tahaberkamcadev.e_com.user_service.exception.EmailAlreadyExistsException;
 import com.tahaberkamcadev.e_com.user_service.exception.UnauthorizedAccessException;
 import com.tahaberkamcadev.e_com.user_service.exception.UserNotFoundException;
@@ -36,7 +33,6 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
-    private final EventPublishingService eventPublishingService;
 
     @Override
     @Transactional
@@ -60,14 +56,6 @@ public class AuthServiceImpl implements AuthService {
 
         User savedUser = userRepository.save(user);
         log.info("New user registered with id: {}", savedUser.getId());
-
-        // Publish user created event for SAGA pattern
-        UserEvent userCreatedEvent = UserEvent.userCreated(
-            savedUser.getId(), 
-            savedUser.getEmail(), 
-            UserResponse.fromEntity(savedUser)
-        );
-        eventPublishingService.publishUserCreated(userCreatedEvent);
 
         Map<String, Object> claims = Map.of(
                 "userId", savedUser.getId().toString(),
@@ -122,10 +110,6 @@ public class AuthServiceImpl implements AuthService {
         User verifiedUser = userRepository.save(user);
 
         log.info("Email verified for user: {}", verifiedUser.getId());
-
-        // Publish verification event for SAGA pattern
-        UserEvent verificationEvent = UserEvent.userVerified(verifiedUser.getId(), verifiedUser.getEmail());
-        eventPublishingService.publishUserVerified(verificationEvent);
     }
 
     @Override

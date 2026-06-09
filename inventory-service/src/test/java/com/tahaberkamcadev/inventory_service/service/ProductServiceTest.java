@@ -132,6 +132,6 @@ class ProductServiceTest {
         Product saved = captor.getValue();
         assertThat(saved.getTotalReviews()).isEqualTo(3);
         assertThat(saved.getAverageRating()).isEqualByComparingTo("3.00");
-        assertThat(saved.getLatestReviews()).hasSize(1);
+        assertThat(saved.getLatestReviews()).containsOnlyOnce("\"userName\"");
     }
 }

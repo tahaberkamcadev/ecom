@@ -36,7 +36,6 @@ class UserServiceImplTest {
 
     @Mock private UserRepository userRepository;
     @Mock private PasswordEncoder passwordEncoder;
-    @Mock private EventPublishingService eventPublishingService;
 
     @InjectMocks
     private UserServiceImpl userService;

@@ -9,7 +9,6 @@ import com.tahaberkamcadev.e_com.user_service.model.Role;
 import com.tahaberkamcadev.e_com.user_service.model.User;
 import com.tahaberkamcadev.e_com.user_service.repository.UserRepository;
 import com.tahaberkamcadev.e_com.user_service.security.JwtService;
-import com.tahaberkamcadev.e_com.user_service.service.EventPublishingService;
 import com.tahaberkamcadev.e_com.user_service.service.impl.AuthServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -43,7 +42,6 @@ class AuthServiceImplTest {
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private JwtService jwtService;
     @Mock private AuthenticationManager authenticationManager;
-    @Mock private EventPublishingService eventPublishingService;
 
     @InjectMocks
     private AuthServiceImpl authService;
@@ -71,7 +69,7 @@ class AuthServiceImplTest {
         given(userRepository.existsByEmail("john@example.com")).willReturn(false);
         given(passwordEncoder.encode("password123")).willReturn("$2a$10$encodedPassword");
         given(userRepository.save(any(User.class))).willReturn(savedUser);
-        given(jwtService.generateToken(any(User.class))).willReturn("mock.jwt.token");
+        given(jwtService.generateToken(any(), any(User.class))).willReturn("mock.jwt.token");
         given(jwtService.getExpirationTime()).willReturn(86400000L);
 
         AuthResponse response = authService.register(request);
@@ -90,7 +88,7 @@ class AuthServiceImplTest {
         given(userRepository.existsByEmail("john@example.com")).willReturn(false);
         given(passwordEncoder.encode(anyString())).willReturn("encoded");
         given(userRepository.save(any(User.class))).willReturn(savedUser);
-        given(jwtService.generateToken(any(User.class))).willReturn("token");
+        given(jwtService.generateToken(any(), any(User.class))).willReturn("token");
         given(jwtService.getExpirationTime()).willReturn(86400000L);
 
         authService.register(request);
@@ -121,7 +119,7 @@ class AuthServiceImplTest {
         given(userRepository.existsByEmail(anyString())).willReturn(false);
         given(passwordEncoder.encode("plainPassword")).willReturn("$2a$10$hashed");
         given(userRepository.save(any(User.class))).willReturn(savedUser);
-        given(jwtService.generateToken(any(User.class))).willReturn("token");
+        given(jwtService.generateToken(any(), any(User.class))).willReturn("token");
         given(jwtService.getExpirationTime()).willReturn(86400000L);
 
         authService.register(request);
@@ -139,7 +137,7 @@ class AuthServiceImplTest {
         given(userRepository.existsByEmail(anyString())).willReturn(false);
         given(passwordEncoder.encode(anyString())).willReturn("encoded");
         given(userRepository.save(any(User.class))).willReturn(savedUser);
-        given(jwtService.generateToken(any(User.class))).willReturn("token");
+        given(jwtService.generateToken(any(), any(User.class))).willReturn("token");
         given(jwtService.getExpirationTime()).willReturn(86400000L);
 
         authService.register(request);
@@ -156,7 +154,7 @@ class AuthServiceImplTest {
 
         given(userRepository.findByEmail("john@example.com")).willReturn(Optional.of(savedUser));
         given(userRepository.save(any(User.class))).willReturn(savedUser);
-        given(jwtService.generateToken(savedUser)).willReturn("mock.jwt.token");
+        given(jwtService.generateToken(any(), any(User.class))).willReturn("mock.jwt.token");
         given(jwtService.getExpirationTime()).willReturn(86400000L);
 
         AuthResponse response = authService.login(request);
@@ -174,7 +172,7 @@ class AuthServiceImplTest {
 
         given(userRepository.findByEmail("john@example.com")).willReturn(Optional.of(savedUser));
         given(userRepository.save(any(User.class))).willReturn(savedUser);
-        given(jwtService.generateToken(any())).willReturn("token");
+        given(jwtService.generateToken(any(), any(User.class))).willReturn("token");
         given(jwtService.getExpirationTime()).willReturn(86400000L);
 
         authService.login(request);

@@ -13,7 +13,6 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -155,24 +154,25 @@ public class ProductService {
 
             // Ternary operator to handle null case for latestReviews
             String raw = product.getLatestReviews();
-            List<ReviewSummary> reviews = (raw != null) ? 
-            mapper.readValue(raw, new TypeReference<List<ReviewSummary>>(){})
-            : Collections.emptyList();
-            
-            BigDecimal totalRating = product.getAverageRating();
+            List<ReviewSummary> reviews = (raw != null) ?
+            new java.util.ArrayList<>(mapper.readValue(raw, new TypeReference<List<ReviewSummary>>(){}))
+            : new java.util.ArrayList<>();
+
+            int oldCount = product.getTotalReviews();
+            BigDecimal oldAvg = product.getAverageRating() != null ? product.getAverageRating() : BigDecimal.ZERO;
+            int newCount = oldCount + 1;
+            BigDecimal newAvg = oldAvg.multiply(BigDecimal.valueOf(oldCount))
+                    .add(BigDecimal.valueOf(reviewSummary.rating()))
+                    .divide(BigDecimal.valueOf(newCount), 2, java.math.RoundingMode.HALF_UP);
 
             if (reviews.size() >= 5) {
-            reviews.remove(0);
-            reviews.add(reviewSummary);
-            product.setAverageRating(totalRating);
-            String reviewsString = mapper.writeValueAsString(reviewSummary);
-            product.setLatestReviews(reviewsString); 
-            } else {
-                reviews.add(reviewSummary);
-                product.setAverageRating(totalRating);
-                String reviewsString = mapper.writeValueAsString(reviewSummary);
-                product.setLatestReviews(reviewsString);
+                reviews.remove(0);
             }
+            reviews.add(reviewSummary);
+
+            product.setTotalReviews(newCount);
+            product.setAverageRating(newAvg);
+            product.setLatestReviews(mapper.writeValueAsString(reviews));
             
             productRepository.save(product);
             log.info("Review summary updated for product {}", product.getName());
