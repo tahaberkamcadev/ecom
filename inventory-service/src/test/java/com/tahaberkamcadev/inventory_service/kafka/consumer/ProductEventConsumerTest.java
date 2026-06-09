@@ -2,7 +2,6 @@ package com.tahaberkamcadev.inventory_service.kafka.consumer;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -20,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.support.Acknowledgment;
 
+import com.tahaberkamcadev.inventory_service.exception.InsufficientStockException;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent.OrderItem;
 import com.tahaberkamcadev.inventory_service.service.OutboxEventService;
@@ -67,7 +67,7 @@ class ProductEventConsumerTest {
 
         consumer.productStockUpdate(toJson(event), ack);
 
-        verify(productService, never()).decreaseMultipleStock(any());
+        verify(productService, never()).reserve(any(), any(), any(), any(), any());
         verify(outboxEventService, never()).saveOutboxEvent(any(), any(), any(), any(), any());
         verify(ack).acknowledge();
     }
@@ -76,8 +76,8 @@ class ProductEventConsumerTest {
     void productStockUpdate_shouldPublishStockFailedOnInsufficientStock() {
         OrderEvent event = createEvent("order_created", 5);
         when(processedEventService.markIfNew(event.getEventId(), "stock_updated")).thenReturn(true);
-        doThrow(new IllegalStateException("Product out of stock"))
-                .when(productService).decreaseMultipleStock(any());
+        doThrow(new InsufficientStockException("Insufficient stock for product"))
+                .when(productService).reserve(any(), any(), any(), any(), any());
 
         consumer.productStockUpdate(toJson(event), ack);
 

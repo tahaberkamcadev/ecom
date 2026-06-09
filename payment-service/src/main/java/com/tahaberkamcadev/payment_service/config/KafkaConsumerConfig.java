@@ -1,4 +1,4 @@
-package com.tahaberkamcadev.inventory_service.config;
+package com.tahaberkamcadev.payment_service.config;
 
 import java.util.Map;
 

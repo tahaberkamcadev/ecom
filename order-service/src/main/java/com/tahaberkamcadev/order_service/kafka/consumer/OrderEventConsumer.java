@@ -2,6 +2,8 @@ package com.tahaberkamcadev.order_service.kafka.consumer;
 
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
+import org.springframework.kafka.support.KafkaHeaders;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
@@ -107,5 +109,45 @@ public class OrderEventConsumer {
             log.info("Duplicate payment failed event received, ignoring. Event ID: {}", event.getEventId());
         }
         ack.acknowledge();
+    }
+
+    @KafkaListener(topics = "saga.payment.payment_completed", groupId = "${spring.kafka.consumer.group-id}")
+    @Transactional
+    public void consumePaymentCompletedEvent(@Payload String payload, Acknowledgment ack) {
+        PaymentEvent event;
+        try {
+            event = new ObjectMapper().readValue(payload, PaymentEvent.class);
+        } catch (Exception e) {
+            log.error("Failed to deserialize PaymentEvent: {}", payload, e);
+            ack.acknowledge();
+            return;
+        }
+
+        if (event.getEventId() == null || event.getOrderId() == null || event.getEventType() == null) {
+            throw new IllegalArgumentException("Received invalid PaymentEvent: " + event);
+        }
+
+        if (processedEventService.markIfNew(event.getEventId(), "payment_completed")) {
+            orderService.updateOrderStatus(event.getOrderId(), OrderStatus.DELIVERED);
+            log.info("Order {} marked as COMPLETED.", event.getOrderId());
+        } else {
+            log.info("Duplicate payment completed event received, ignoring. Event ID: {}", event.getEventId());
+        }
+        ack.acknowledge();
+    }
+
+    @KafkaListener(
+        topics = {
+            "${app.kafka.topics.stock-updated-dlt}",
+            "${app.kafka.topics.stock-failed-dlt}",
+            "${app.kafka.topics.payment-failed-dlt}",
+            "${app.kafka.topics.payment-completed-dlt}"
+        },
+        groupId = "${spring.kafka.consumer.group-id}-dlt"
+    )
+    public void handleDlt(
+            @Payload String payload,
+            @Header(KafkaHeaders.RECEIVED_TOPIC) String topic) {
+        log.error("[DLT] Message discarded after exhausting retries. Topic: {}, Payload: {}", topic, payload);
     }
 }

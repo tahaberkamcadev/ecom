@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
 import com.tahaberkamcadev.order_service.dto.CreateOrderRequest;
@@ -26,8 +27,9 @@ import tools.jackson.databind.ObjectMapper;
 public class OrderService {
 
     private final OrderRepository orderRepository;
+    private final OutboxEventService outboxEventService;
 
-
+    @Transactional
     public UUID createOrder(CreateOrderRequest request, UUID userId) {
         ObjectMapper mapper = new ObjectMapper();
         String itemsJson = mapper.writeValueAsString(request.items());
@@ -38,7 +40,9 @@ public class OrderService {
                 .status(OrderStatus.PENDING)
                 .build();
 
-        return orderRepository.save(order).getId();
+        UUID orderId = orderRepository.save(order).getId();
+        outboxEventService.saveOutboxEvent(orderId, userId, "order_created", request.items());
+        return orderId;
     }
 
     public void updatePriceInfo(InventoryEvent event) {

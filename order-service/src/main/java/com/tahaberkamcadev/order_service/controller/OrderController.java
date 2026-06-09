@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.RestController;
 import com.tahaberkamcadev.order_service.dto.CreateOrderRequest;
 import com.tahaberkamcadev.order_service.dto.OrderResponse;
 import com.tahaberkamcadev.order_service.service.OrderService;
-import com.tahaberkamcadev.order_service.service.OutboxEventService;
 
 import lombok.AllArgsConstructor;
 
@@ -23,13 +22,10 @@ import lombok.AllArgsConstructor;
 public class OrderController {
 
     private final OrderService orderService;
-    private final OutboxEventService outboxEventService;
-
 
     @PostMapping()
     public ResponseEntity<OrderResponse> createOrder(@RequestHeader("X-User-Id") UUID userId, @RequestBody CreateOrderRequest request) {
-        UUID orderId = orderService.createOrder(request, userId);
-        outboxEventService.saveOutboxEvent(orderId, userId, "order_created", request.items());
+        orderService.createOrder(request, userId);
         return ResponseEntity.ok().build();
     }
 

@@ -4,18 +4,21 @@ import java.util.List;
 
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
+import org.springframework.kafka.support.KafkaHeaders;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.tahaberkamcadev.inventory_service.dto.ReviewSummary;
+import com.tahaberkamcadev.inventory_service.dto.StockAdjustment;
+import com.tahaberkamcadev.inventory_service.exception.InsufficientStockException;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent.OrderItem;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.ReviewEvent;
 import com.tahaberkamcadev.inventory_service.service.OutboxEventService;
 import com.tahaberkamcadev.inventory_service.service.ProcessedEventService;
 import com.tahaberkamcadev.inventory_service.service.ProductService;
-import com.tahaberkamcadev.inventory_service.dto.StockAdjustment;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -61,11 +64,10 @@ public class ProductEventConsumer {
 
         if ("order_created".equals(event.getEventType())) {
             if (processedEventService.markIfNew(event.getEventId(), "stock_updated")) {
-                boolean reserved = productService.tryDecreaseMultipleStock(adjustments);
-                if (reserved) {
-                    outboxEventService.saveOutboxEvent("Inventory", event.getOrderId(), event.getCustomerId(), event, "stock_updated");
-                } else {
-                    log.warn("Insufficient stock for order {}", event.getOrderId());
+                try {
+                    productService.reserve(adjustments, "Inventory", event.getOrderId(), event.getCustomerId(), event);
+                } catch (InsufficientStockException e) {
+                    log.warn("Insufficient stock for order {}: {}", event.getOrderId(), e.getMessage());
                     outboxEventService.saveOutboxStockFailedEvent("Inventory", event.getOrderId(), event.getCustomerId());
                 }
             } else {
@@ -148,5 +150,18 @@ public class ProductEventConsumer {
             throw new IllegalArgumentException("rating must be between 1 and 5: " + event.getRating());
         }
         return new ReviewSummary(event.getUserName(), event.getRating(), event.getComment());
+    }
+
+    @KafkaListener(
+        topics = {
+            "${app.kafka.topics.reserve-request-dlt}",
+            "${app.kafka.topics.review-request-dlt}"
+        },
+        groupId = "${spring.kafka.consumer.group-id}-dlt"
+    )
+    public void handleDlt(
+            @Payload String payload,
+            @Header(KafkaHeaders.RECEIVED_TOPIC) String topic) {
+        log.error("[DLT] Message discarded after exhausting retries. Topic: {}, Payload: {}", topic, payload);
     }
 }

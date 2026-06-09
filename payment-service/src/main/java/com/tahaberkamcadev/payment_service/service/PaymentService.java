@@ -1,5 +1,7 @@
 package com.tahaberkamcadev.payment_service.service;
 
+import java.util.UUID;
+
 import org.springframework.stereotype.Service;
 
 import com.tahaberkamcadev.payment_service.entity.Payment;
@@ -21,11 +23,11 @@ public class PaymentService {
         paymentRepository.save(payment);
     }
 
-    public Payment getPaymentByOrderId(String orderId) {
-        return paymentRepository.findAll().stream()
-            .filter(payment -> payment.getOrderId().toString().equals(orderId))
-            .findFirst()
-            .orElse(null);
+    public Payment getPaymentByOrderId(UUID orderId) {
+
+        return paymentRepository.findByOrderId(orderId).orElseThrow(
+        () -> new IllegalStateException("Payment not found for order: " + orderId));
+
     }
 
 
@@ -33,12 +35,14 @@ public class PaymentService {
     // In terms of this projects scope, we will just mock the payment processing.
     @Transactional
     public String mockPaymentProcessing(Payment payment) {
+
         try {
             Thread.sleep(2000); // Simulate payment processing delay
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
         int random = (int) (Math.random() * 10);
+
         if (random < 9) { // 90% chance of success
             log.info("Payment for order {} completed successfully.", payment.getOrderId());
             return "COMPLETED";

@@ -1,6 +1,9 @@
 package com.tahaberkamcadev.inventory_service.service;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.tahaberkamcadev.inventory_service.repository.ProductRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -15,13 +18,13 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import jakarta.transaction.Transactional;
-
 import com.tahaberkamcadev.inventory_service.dto.ItemPrice;
 import com.tahaberkamcadev.inventory_service.dto.OrderPriceResponse;
 import com.tahaberkamcadev.inventory_service.dto.ReviewSummary;
 import com.tahaberkamcadev.inventory_service.dto.StockAdjustment;
 import com.tahaberkamcadev.inventory_service.entity.Product;
+import com.tahaberkamcadev.inventory_service.exception.InsufficientStockException;
+import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent.OrderItem;
 
 @Service
@@ -29,6 +32,7 @@ import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent.Orde
 @RequiredArgsConstructor
 public class ProductService {
     private final ProductRepository productRepository;
+    private final OutboxEventService outboxEventService;
 
     public void saveProduct(Product product) {
         productRepository.save(product);
@@ -98,25 +102,17 @@ public class ProductService {
         }
     }
 
-    @Transactional
-    public void decreaseMultipleStock(List<StockAdjustment> adjustments) {
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void reserve(List<StockAdjustment> adjustments, String aggregateType,
+            UUID orderId, UUID customerId, OrderEvent event) {
         for (StockAdjustment adjustment : adjustments) {
-            decreaseStock(adjustment.productId(), adjustment.quantity());
-        }
-    }
-
-    @Transactional
-    public boolean tryDecreaseMultipleStock(List<StockAdjustment> adjustments) {
-        for (StockAdjustment adjustment : adjustments) {
-            Product product = productRepository.findById(adjustment.productId()).orElse(null);
-            if (product == null || product.getStock() < adjustment.quantity()) {
-                return false;
+            int updated = productRepository.tryDecreaseStock(adjustment.productId(), adjustment.quantity());
+            if (updated == 0) {
+                log.warn("Insufficient stock for productId={} quantity={}", adjustment.productId(), adjustment.quantity());
+                throw new InsufficientStockException("Insufficient stock for product: " + adjustment.productId());
             }
         }
-        for (StockAdjustment adjustment : adjustments) {
-            decreaseStock(adjustment.productId(), adjustment.quantity());
-        }
-        return true;
+        outboxEventService.saveOutboxEvent(aggregateType, orderId, customerId, event, "stock_updated");
     }
 
     @Transactional
@@ -184,14 +180,6 @@ public class ProductService {
             throw new IllegalArgumentException("No such product exists: " + productId);
         }
     }
-
-    // public OrderPriceResponse getOrderPrice(List<StockAdjustment> adjustments) {
-    //     BigDecimal totalPrice = BigDecimal.ZERO;
-    //     for (StockAdjustment adjustment : adjustments) {
-    //         Product product = productRepository.findById(adjustment.productId()).orElseThrow(() -> new IllegalArgumentException("No such product exists: " + adjustment.productId()));
-    //         totalPrice = totalPrice.add(product.getPrice().multiply(BigDecimal.valueOf(adjustment.quantity())));
-    //     }
-
         
     }
 

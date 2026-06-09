@@ -2,6 +2,8 @@ package com.tahaberkamcadev.payment_service.kafka.consumer;
 
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
+import org.springframework.kafka.support.KafkaHeaders;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
@@ -61,5 +63,15 @@ public class PaymentEventConsumer {
             log.info("Duplicate event received: {} - {}", event.getEventType(), event.getEventId());
             ack.acknowledge();
         }
+    }
+
+    @KafkaListener(
+        topics = "${app.kafka.topics.stock-updated-dlt}",
+        groupId = "${spring.kafka.consumer.group-id}-dlt"
+    )
+    public void handleDlt(
+            @Payload String payload,
+            @Header(KafkaHeaders.RECEIVED_TOPIC) String topic) {
+        log.error("[DLT] Message discarded after exhausting retries. Topic: {}, Payload: {}", topic, payload);
     }
 }
