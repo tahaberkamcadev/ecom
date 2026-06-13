@@ -86,6 +86,38 @@ public class OutboxEventService {
     }
 
     @Transactional
+    public void saveOutboxReservedEvent(String aggregateType, UUID orderId, UUID customerId, List<OrderItem> items, List<ItemPrice> itemPrices, String eventType) {
+        Map<UUID, BigDecimal> priceMap = itemPrices.stream()
+                .collect(Collectors.toMap(ItemPrice::productId, ItemPrice::price));
+        BigDecimal totalAmount = items.stream()
+                .map(item -> priceMap.getOrDefault(item.getProductId(), BigDecimal.ZERO)
+                        .multiply(BigDecimal.valueOf(item.getQuantity())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        Map<String, Object> payloadData = new HashMap<>();
+        payloadData.put("eventId", UUID.randomUUID());
+        payloadData.put("orderId", orderId);
+        payloadData.put("customerId", customerId);
+        payloadData.put("eventType", eventType);
+        payloadData.put("aggregateType", aggregateType);
+        payloadData.put("totalAmount", totalAmount);
+        payloadData.put("itemPrices", itemPrices);
+        payloadData.put("items", items);
+
+        ObjectMapper mapper = new ObjectMapper();
+        String payload = mapper.writeValueAsString(payloadData);
+
+        outboxEventRepository.save(
+            OutboxEvent.builder()
+                .aggregateType(aggregateType)
+                .payload(payload)
+                .eventType(eventType)
+                .build()
+        );
+        log.info("Reserved outbox event saved: {} for order {}", eventType, orderId);
+    }
+
+    @Transactional
     public void saveOutboxReviewEvent(String aggregateType, String aggregateId, String eventType) {
         outboxEventRepository.save(
             OutboxEvent.builder()

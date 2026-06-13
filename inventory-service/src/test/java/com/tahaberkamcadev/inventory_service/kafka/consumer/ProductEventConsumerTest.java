@@ -3,7 +3,6 @@ package com.tahaberkamcadev.inventory_service.kafka.consumer;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -19,7 +18,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.support.Acknowledgment;
 
-import com.tahaberkamcadev.inventory_service.exception.InsufficientStockException;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent.OrderItem;
 import com.tahaberkamcadev.inventory_service.service.OutboxEventService;
@@ -46,49 +44,32 @@ class ProductEventConsumerTest {
     @InjectMocks
     private ProductEventConsumer consumer;
 
-    // @Test
-    // void productStockUpdate_shouldReserveStockOnOrderCreated() {
-    //     OrderEvent event = createEvent("order_created", 2);
-    //     when(processedEventService.markIfNew(event.getEventId(), "stock_updated")).thenReturn(true);
-
-    //     consumer.productStockUpdate(toJson(event), ack);
-
-    //     verify(productService).decreaseMultipleStock(argThat(adjustments ->
-    //             adjustments.size() == 1 && adjustments.getFirst().quantity() == 2));
-    //     verify(outboxEventService).saveOutboxEvent(eq("Inventory"), eq(event.getOrderId()), eq(event.getCustomerId()), eq(event), eq("stock_updated"));
-    //     verify(productService, never()).increaseMultipleStock(any());
-    //     verify(ack).acknowledge();
-    // }
-
     @Test
-    void productStockUpdate_shouldIgnoreDuplicateEvents() {
-        OrderEvent event = createEvent("order_created", 1);
-        when(processedEventService.markIfNew(event.getEventId(), "stock_updated")).thenReturn(false);
+    void productStockUpdate_shouldRevertStockOnOrderCancelled() {
+        OrderEvent event = createEvent("order_cancelled", 2);
+        when(processedEventService.markIfNew(event.getEventId(), "stock_reverted")).thenReturn(true);
 
         consumer.productStockUpdate(toJson(event), ack);
 
-        verify(productService, never()).reserve(any(), any(), any(), any(), any());
-        verify(outboxEventService, never()).saveOutboxEvent(any(), any(), any(), any(), any());
+        verify(productService).increaseMultipleStock(any());
+        verify(outboxEventService).saveOutboxEvent(eq("Inventory"), eq(event.getOrderId()), eq(event.getCustomerId()), any(), eq("stock_reverted"));
         verify(ack).acknowledge();
     }
 
     @Test
-    void productStockUpdate_shouldPublishStockFailedOnInsufficientStock() {
-        OrderEvent event = createEvent("order_created", 5);
-        when(processedEventService.markIfNew(event.getEventId(), "stock_updated")).thenReturn(true);
-        doThrow(new InsufficientStockException("Insufficient stock for product"))
-                .when(productService).reserve(any(), any(), any(), any(), any());
+    void productStockUpdate_shouldIgnoreDuplicateCancelledEvents() {
+        OrderEvent event = createEvent("order_cancelled", 1);
+        when(processedEventService.markIfNew(event.getEventId(), "stock_reverted")).thenReturn(false);
 
         consumer.productStockUpdate(toJson(event), ack);
 
-        verify(outboxEventService).saveOutboxStockFailedEvent(eq("Inventory"), eq(event.getOrderId()), eq(event.getCustomerId()));
-        verify(outboxEventService, never()).saveOutboxEvent(any(), any(), any(), any(), any());
+        verify(productService, never()).increaseMultipleStock(any());
         verify(ack).acknowledge();
     }
 
     @Test
     void productStockUpdate_shouldThrowForInvalidQuantity() {
-        OrderEvent event = createEvent("order_created", 0);
+        OrderEvent event = createEvent("order_cancelled", 0);
 
         assertThatThrownBy(() -> consumer.productStockUpdate(toJson(event), ack))
                 .isInstanceOf(IllegalArgumentException.class)
