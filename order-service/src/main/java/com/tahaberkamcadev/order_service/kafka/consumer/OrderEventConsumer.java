@@ -48,37 +48,10 @@ public class OrderEventConsumer {
         }
 
         if (processedEventService.markIfNew(event.getEventId(), "stock_reserved")) {
-            orderService.updateOrderStatus(event.getOrderId(), OrderStatus.PROCESSING);
-            orderService.updatePriceInfo(event);
-            log.info("Price added to order table.");
+            orderService.createOrderFromEvent(event);
+            log.info("Order {} created in PROCESSING state.", event.getOrderId());
         } else {
             log.info("Duplicate stock reserved event received, ignoring. Event ID: {}", event.getEventId());
-        }
-        ack.acknowledge();
-    }
-
-    // Stock reservation fail compensation
-    @KafkaListener(topics = "saga.inventory.stock_failed", groupId = "${spring.kafka.consumer.group-id}")
-    @Transactional
-    public void consumeStockFailedEvent(@Payload String payload, Acknowledgment ack) {
-        InventoryEvent event;
-        try {
-            event = new ObjectMapper().readValue(payload, InventoryEvent.class);
-        } catch (Exception e) {
-            log.error("Failed to deserialize InventoryEvent for stock_failed: {}", payload, e);
-            ack.acknowledge();
-            return;
-        }
-
-        if (event.getEventId() == null || event.getOrderId() == null || event.getEventType() == null) {
-            throw new IllegalArgumentException("Received invalid InventoryEvent: " + event);
-        }
-
-        if (processedEventService.markIfNew(event.getEventId(), "stock_failed")) {
-            orderService.updateOrderStatus(event.getOrderId(), OrderStatus.CANCELLED);
-            log.info("Order cancelled.");
-        } else {
-            log.info("Duplicate stock failed event received, ignoring. Event ID: {}", event.getEventId());
         }
         ack.acknowledge();
     }

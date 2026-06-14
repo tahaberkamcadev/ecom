@@ -52,6 +52,24 @@ public class ProductService {
             .build();
     }
 
+    @Transactional
+    public OrderPriceResponse reserveSync(UUID customerId, List<OrderItem> items) {
+        UUID orderId = UUID.randomUUID();
+        for (OrderItem item : items) {
+            int updated = productRepository.tryDecreaseStock(item.getProductId(), item.getQuantity());
+            if (updated == 0) {
+                throw new InsufficientStockException("Insufficient stock for product: " + item.getProductId());
+            }
+        }
+        OrderPriceResponse priceResponse = getOrderPrice(items);
+        outboxEventService.saveOutboxReservedEvent("Inventory", orderId, customerId, items, priceResponse.getItemPrices(), "stock_updated");
+        return OrderPriceResponse.builder()
+                .price(priceResponse.getPrice())
+                .orderId(orderId)
+                .itemPrices(priceResponse.getItemPrices())
+                .build();
+    }
+
     public void deleteProduct(UUID id) {
         productRepository.deleteById(id);
         log.info("Product deleted: {}", id);

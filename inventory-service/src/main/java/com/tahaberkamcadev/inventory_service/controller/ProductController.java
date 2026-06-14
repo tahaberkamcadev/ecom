@@ -1,14 +1,17 @@
 package com.tahaberkamcadev.inventory_service.controller;
 
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.tahaberkamcadev.inventory_service.dto.OrderPriceResponse;
+import com.tahaberkamcadev.inventory_service.dto.PurchaseRequest;
 import com.tahaberkamcadev.inventory_service.entity.Product;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent.OrderItem;
 import com.tahaberkamcadev.inventory_service.service.ProductService;
@@ -37,5 +40,11 @@ public class ProductController {
     public ResponseEntity<OrderPriceResponse> getOrderPrice(@RequestBody List<OrderItem> orderItems) {
         OrderPriceResponse response = productService.getOrderPrice(orderItems);
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/purchase")
+    public ResponseEntity<OrderPriceResponse> purchase(@RequestHeader("X-User-Id") UUID customerId, @RequestBody PurchaseRequest request) {
+        OrderPriceResponse response = productService.reserveSync(customerId, request.items());
+        return ResponseEntity.accepted().body(response);
     }
 }

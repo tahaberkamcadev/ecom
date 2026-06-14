@@ -12,7 +12,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.tahaberkamcadev.inventory_service.dto.ReviewSummary;
 import com.tahaberkamcadev.inventory_service.dto.StockAdjustment;
-import com.tahaberkamcadev.inventory_service.exception.InsufficientStockException;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent.OrderItem;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.ReviewEvent;
@@ -61,21 +60,6 @@ public class ProductEventConsumer {
                 .toList();
 
         log.info("Received stock update message: {} for order {}", event.getEventType(), event.getOrderId());
-
-        if ("order_created".equals(event.getEventType())) {
-            if (processedEventService.markIfNew(event.getEventId(), "stock_updated")) {
-                try {
-                    productService.reserve(adjustments, "Inventory", event.getOrderId(), event.getCustomerId(), event);
-                } catch (InsufficientStockException e) {
-                    log.warn("Insufficient stock for order {}: {}", event.getOrderId(), e.getMessage());
-                    outboxEventService.saveOutboxStockFailedEvent("Inventory", event.getOrderId(), event.getCustomerId());
-                }
-            } else {
-                log.info("Duplicate stock update event received, ignoring. Event ID: {}", event.getEventId());
-            }
-            ack.acknowledge();
-            return;
-        }
 
         if ("order_cancelled".equals(event.getEventType())) {
             if (processedEventService.markIfNew(event.getEventId(), "stock_reverted")) {
