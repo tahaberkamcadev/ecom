@@ -17,7 +17,7 @@ import com.tahaberkamcadev.order_service.service.OrderService;
 import lombok.AllArgsConstructor;
 
 @RestController
-@RequestMapping("/api/orders/ya8MHbbEcUmXu5LXIFa1q8PkSk2ceYMRRGS94ggIzX6")  // Obfuscated, to prevent unauthorized access
+@RequestMapping("/api/orders/")  // Only gateway can access this endpoint
 @AllArgsConstructor
 public class OrderController {
 

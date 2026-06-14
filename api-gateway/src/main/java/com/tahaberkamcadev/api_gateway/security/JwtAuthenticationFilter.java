@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -27,6 +28,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
 
+    @Value("${app.gateway.secret}")
+    private String gatewaySecret;
+
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
@@ -38,7 +42,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (isPublicPath(path, method)) {
             log.debug("Public path, skipping JWT check: {} {}", method, path);
-            chain.doFilter(request, response);
+            MutableHttpServletRequest mutableRequest = new MutableHttpServletRequest(request);
+            mutableRequest.putHeader("X-Gateway-Secret", gatewaySecret);
+            chain.doFilter(mutableRequest, response);
             return;
         }
 
@@ -73,6 +79,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             SecurityContextHolder.getContext().setAuthentication(auth);
 
             MutableHttpServletRequest mutableRequest = new MutableHttpServletRequest(request);
+            mutableRequest.putHeader("X-Gateway-Secret", gatewaySecret);
             mutableRequest.putHeader("X-User-Email", email);
             if (userId != null) {
                 mutableRequest.putHeader("X-User-Id", userId);
