@@ -8,8 +8,6 @@ import com.tahaberkamcadev.inventory_service.repository.ProductRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import tools.jackson.core.type.TypeReference;
-import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -19,7 +17,6 @@ import java.util.UUID;
 
 import com.tahaberkamcadev.inventory_service.dto.ItemPrice;
 import com.tahaberkamcadev.inventory_service.dto.OrderPriceResponse;
-import com.tahaberkamcadev.inventory_service.dto.ReviewSummary;
 import com.tahaberkamcadev.inventory_service.dto.StockAdjustment;
 import com.tahaberkamcadev.inventory_service.entity.Product;
 import com.tahaberkamcadev.inventory_service.exception.InsufficientStockException;
@@ -33,9 +30,14 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final OutboxEventService outboxEventService;
 
+    @Transactional
     public void saveProduct(Product product) {
-        productRepository.save(product);
-        log.info("New product added: {}", product.getName());
+        if (product.getStock() <= 0) {
+            throw new IllegalArgumentException("Initial stock must be positive: " + product.getStock());
+        }
+        Product saved = productRepository.save(product);
+        outboxEventService.saveOutboxProductEvent(saved, "product_created");
+        log.info("New product added: {}", saved.getName());
     }
 
     public OrderPriceResponse getOrderPrice(List<OrderItem> orderItems) {
@@ -60,6 +62,7 @@ public class ProductService {
             if (updated == 0) {
                 throw new InsufficientStockException("Insufficient stock for product: " + item.getProductId());
             }
+            publishOutOfStockIfDepleted(item.getProductId());
         }
         OrderPriceResponse priceResponse = getOrderPrice(items);
         outboxEventService.saveOutboxReservedEvent("Inventory", orderId, customerId, items, priceResponse.getItemPrices(), "stock_updated");
@@ -75,13 +78,15 @@ public class ProductService {
         log.info("Product deleted: {}", id);
     }
 
+    @Transactional
     public void updateProduct(Product product) {
-        if (productRepository.existsById(product.getId())) {
-            productRepository.save(product);
-            log.info("Product updated: {}", product.getName());
-        } else {
-            throw new IllegalArgumentException("No such product exists: " + product.getId());
-        }
+        Product existing = productRepository.findById(product.getId())
+                .orElseThrow(() -> new IllegalArgumentException("No such product exists: " + product.getId()));
+        int previousStock = existing.getStock();
+        Product saved = productRepository.save(product);
+        outboxEventService.saveOutboxProductEvent(saved, "product_updated");
+        publishStockAvailabilityTransition(previousStock, saved);
+        log.info("Product updated: {}", saved.getName());
     }
 
     @Transactional
@@ -92,8 +97,10 @@ public class ProductService {
         Optional<Product> productOpt = productRepository.findById(id);
         if (productOpt.isPresent()) {
             Product product = productOpt.get();
+            int previousStock = product.getStock();
             product.setStock(quantity);
             productRepository.save(product);
+            publishStockAvailabilityTransition(previousStock, product);
             log.info("Stock set to {} for product {}", quantity, product.getName());
         } else {
             throw new IllegalArgumentException("No such product exists: " + id);
@@ -111,8 +118,10 @@ public class ProductService {
             if (product.getStock() < quantity) {
                 throw new IllegalStateException("Product out of stock: " + product.getName());
             }
+            int previousStock = product.getStock();
             product.setStock(product.getStock() - quantity);
             productRepository.save(product);
+            publishStockAvailabilityTransition(previousStock, product);
             log.info("Stock decreased by {} for product {}", quantity, product.getName());
         } else {
             throw new IllegalArgumentException("No such product exists: " + productId);
@@ -128,6 +137,7 @@ public class ProductService {
                 log.warn("Insufficient stock for productId={} quantity={}", adjustment.productId(), adjustment.quantity());
                 throw new InsufficientStockException("Insufficient stock for product: " + adjustment.productId());
             }
+            publishOutOfStockIfDepleted(adjustment.productId());
         }
         outboxEventService.saveOutboxEvent(aggregateType, orderId, customerId, event, "stock_updated");
     }
@@ -140,8 +150,10 @@ public class ProductService {
         Optional<Product> productOpt = productRepository.findById(productId);
         if (productOpt.isPresent()) {
             Product product = productOpt.get();
+            int previousStock = product.getStock();
             product.setStock(product.getStock() + quantity);
             productRepository.save(product);
+            publishStockAvailabilityTransition(previousStock, product);
             log.info("Stock increased by {} for product {}", quantity, product.getName());
         } else {
             throw new IllegalArgumentException("No such product exists: " + productId);
@@ -155,49 +167,20 @@ public class ProductService {
         }
     }
 
-    @Transactional
-    public void updateReviewSummary(UUID productId, ReviewSummary reviewSummary) {
-        if (productId == null) {
-            throw new IllegalArgumentException("productId cannot be null");
-        }
-        if (reviewSummary == null) {
-            throw new IllegalArgumentException("reviewSummary cannot be null");
-        }
-        Optional<Product> productOpt = productRepository.findById(productId);
-
-        if (productOpt.isPresent()) {
-            Product product = productOpt.get();
-
-            ObjectMapper mapper = new ObjectMapper();
-
-            // Ternary operator to handle null case for latestReviews
-            String raw = product.getLatestReviews();
-            List<ReviewSummary> reviews = (raw != null) ?
-            new java.util.ArrayList<>(mapper.readValue(raw, new TypeReference<List<ReviewSummary>>(){}))
-            : new java.util.ArrayList<>();
-
-            int oldCount = product.getTotalReviews();
-            BigDecimal oldAvg = product.getAverageRating() != null ? product.getAverageRating() : BigDecimal.ZERO;
-            int newCount = oldCount + 1;
-            BigDecimal newAvg = oldAvg.multiply(BigDecimal.valueOf(oldCount))
-                    .add(BigDecimal.valueOf(reviewSummary.rating()))
-                    .divide(BigDecimal.valueOf(newCount), 2, java.math.RoundingMode.HALF_UP);
-
-            if (reviews.size() >= 5) {
-                reviews.remove(0);
-            }
-            reviews.add(reviewSummary);
-
-            product.setTotalReviews(newCount);
-            product.setAverageRating(newAvg);
-            product.setLatestReviews(mapper.writeValueAsString(reviews));
-            
-            productRepository.save(product);
-            log.info("Review summary updated for product {}", product.getName());
-        } else {
-            throw new IllegalArgumentException("No such product exists: " + productId);
+    private void publishStockAvailabilityTransition(int previousStock, Product product) {
+        int newStock = product.getStock();
+        if (previousStock > 0 && newStock == 0) {
+            outboxEventService.saveOutboxProductAvailabilityEvent(product, "product_out_of_stock");
+        } else if (previousStock == 0 && newStock > 0) {
+            outboxEventService.saveOutboxProductAvailabilityEvent(product, "product_in_stock");
         }
     }
-        
-    }
 
+    private void publishOutOfStockIfDepleted(UUID productId) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new IllegalArgumentException("No such product exists: " + productId));
+        if (product.getStock() == 0) {
+            outboxEventService.saveOutboxProductAvailabilityEvent(product, "product_out_of_stock");
+        }
+    }
+}

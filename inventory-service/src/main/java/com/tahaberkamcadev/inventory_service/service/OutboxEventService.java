@@ -128,6 +128,55 @@ public class OutboxEventService {
         log.info("Outbox review event saved: {} for aggregate {} with ID {}", eventType, aggregateType, aggregateId);
     }
 
+    @Transactional
+    public void saveOutboxProductEvent(Product product, String eventType) {
+        Map<String, Object> payloadData = buildProductPayload(product, eventType);
+        persistOutboxEvent("Product", eventType, payloadData);
+        log.info("Product outbox event saved: {} for product {}", eventType, product.getId());
+    }
+
+    @Transactional
+    public void saveOutboxProductAvailabilityEvent(Product product, String eventType) {
+        Map<String, Object> payloadData = new HashMap<>();
+        payloadData.put("eventId", UUID.randomUUID());
+        payloadData.put("eventType", eventType);
+        payloadData.put("aggregateType", "Product");
+        payloadData.put("productId", product.getId());
+        payloadData.put("inStock", "product_in_stock".equals(eventType));
+        payloadData.put("stock", product.getStock());
+        persistOutboxEvent("Product", eventType, payloadData);
+        log.info("Product availability outbox event saved: {} for product {}", eventType, product.getId());
+    }
+
+    private Map<String, Object> buildProductPayload(Product product, String eventType) {
+        Map<String, Object> payloadData = new HashMap<>();
+        payloadData.put("eventId", UUID.randomUUID());
+        payloadData.put("eventType", eventType);
+        payloadData.put("aggregateType", "Product");
+        payloadData.put("productId", product.getId());
+        payloadData.put("category", product.getCategory().name());
+        payloadData.put("name", product.getName());
+        payloadData.put("brand", product.getBrand());
+        payloadData.put("description", product.getDescription());
+        payloadData.put("price", product.getPrice());
+        payloadData.put("stock", product.getStock());
+        payloadData.put("inStock", product.getStock() > 0);
+        payloadData.put("active", product.isActive());
+        return payloadData;
+    }
+
+    private void persistOutboxEvent(String aggregateType, String eventType, Map<String, Object> payloadData) {
+        ObjectMapper mapper = new ObjectMapper();
+        String payload = mapper.writeValueAsString(payloadData);
+        outboxEventRepository.save(
+            OutboxEvent.builder()
+                .aggregateType(aggregateType)
+                .payload(payload)
+                .eventType(eventType)
+                .build()
+        );
+    }
+
     // private String toJson(Object payload) {   // For price response to order service
     //     try {
     //         return objectMapper.writeValueAsString(payload);

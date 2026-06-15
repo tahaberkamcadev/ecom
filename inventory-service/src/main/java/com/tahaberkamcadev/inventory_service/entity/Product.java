@@ -58,17 +58,5 @@ public class Product {
     @Column(nullable = false)
     private boolean active;
 
-    @Column
-    private BigDecimal averageRating;
-
-    @Column
-    @Builder.Default
-    private Integer totalReviews = 0;
-
-    // @Column(columnDefinition = "jsonb")
-    // private List<ReviewSummary> latestReviews;
-
-    @Column(columnDefinition = "text")
-    private String latestReviews;
 
 }

@@ -29,7 +29,6 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 .mvn/timing.properties
-.mvn/wrapper/maven-wrapper.properties
 
 # Gradle
 .gradle

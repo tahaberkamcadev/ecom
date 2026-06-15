@@ -19,10 +19,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.tahaberkamcadev.inventory_service.dto.ProductCategory;
-import com.tahaberkamcadev.inventory_service.dto.ReviewSummary;
+import com.tahaberkamcadev.inventory_service.dto.StockAdjustment;
 import com.tahaberkamcadev.inventory_service.entity.Product;
 import com.tahaberkamcadev.inventory_service.repository.ProductRepository;
-import com.tahaberkamcadev.inventory_service.dto.StockAdjustment;
 
 @ExtendWith(MockitoExtension.class)
 class ProductServiceTest {
@@ -30,11 +29,14 @@ class ProductServiceTest {
     @Mock
     private ProductRepository productRepository;
 
+    @Mock
+    private OutboxEventService outboxEventService;
+
     @InjectMocks
     private ProductService productService;
 
     @Test
-    void decreaseStock_shouldDecreaseWhenEnoughStock() {
+    void decreaseStock_shouldNotPublishAvailabilityEventWhenStockRemainsPositive() {
         UUID productId = UUID.randomUUID();
         Product product = Product.builder()
                 .id(productId)
@@ -52,6 +54,26 @@ class ProductServiceTest {
         ArgumentCaptor<Product> captor = ArgumentCaptor.forClass(Product.class);
         verify(productRepository).save(captor.capture());
         assertThat(captor.getValue().getStock()).isEqualTo(7);
+        verify(outboxEventService, never()).saveOutboxProductAvailabilityEvent(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void decreaseStock_shouldPublishOutOfStockWhenStockBecomesZero() {
+        UUID productId = UUID.randomUUID();
+        Product product = Product.builder()
+                .id(productId)
+                .category(ProductCategory.ELECTRONICS)
+                .name("Phone")
+                .brand("BrandX")
+                .price(BigDecimal.TEN)
+                .stock(3)
+                .active(true)
+                .build();
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+
+        productService.decreaseStock(productId, 3);
+
+        verify(outboxEventService).saveOutboxProductAvailabilityEvent(product, "product_out_of_stock");
     }
 
     @Test
@@ -72,10 +94,31 @@ class ProductServiceTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Product out of stock");
         verify(productRepository, never()).save(product);
+        verify(outboxEventService, never()).saveOutboxProductAvailabilityEvent(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
-    void increaseMultipleStock_shouldApplyAllAdjustments() {
+    void increaseStock_shouldPublishInStockWhenStockBecomesPositive() {
+        UUID productId = UUID.randomUUID();
+        Product product = Product.builder()
+                .id(productId)
+                .category(ProductCategory.ELECTRONICS)
+                .name("Phone")
+                .brand("BrandX")
+                .price(BigDecimal.TEN)
+                .stock(0)
+                .active(true)
+                .build();
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+
+        productService.increaseStock(productId, 5);
+
+        assertThat(product.getStock()).isEqualTo(5);
+        verify(outboxEventService).saveOutboxProductAvailabilityEvent(product, "product_in_stock");
+    }
+
+    @Test
+    void increaseMultipleStock_shouldApplyAllAdjustmentsWithoutAvailabilityEventWhenStockStaysPositive() {
         UUID productId1 = UUID.randomUUID();
         UUID productId2 = UUID.randomUUID();
         Product product1 = Product.builder()
@@ -107,31 +150,42 @@ class ProductServiceTest {
         assertThat(product2.getStock()).isEqualTo(5);
         verify(productRepository).save(product1);
         verify(productRepository).save(product2);
+        verify(outboxEventService, never()).saveOutboxProductAvailabilityEvent(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
-    void updateReviewSummary_shouldRecomputeAverageAndKeepLastFiveReviews() {
-        UUID productId = UUID.randomUUID();
+    void saveProduct_shouldRejectZeroStock() {
         Product product = Product.builder()
-                .id(productId)
+                .category(ProductCategory.ELECTRONICS)
+                .name("Phone")
+                .brand("BrandX")
+                .price(BigDecimal.TEN)
+                .stock(0)
+                .active(true)
+                .build();
+
+        assertThatThrownBy(() -> productService.saveProduct(product))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Initial stock must be positive");
+        verify(productRepository, never()).save(product);
+        verify(outboxEventService, never()).saveOutboxProductEvent(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void saveProduct_shouldNotPublishAvailabilityEventWhenCreatedWithStock() {
+        Product product = Product.builder()
                 .category(ProductCategory.ELECTRONICS)
                 .name("Phone")
                 .brand("BrandX")
                 .price(BigDecimal.TEN)
                 .stock(10)
                 .active(true)
-                .averageRating(new BigDecimal("4.00"))
-                .totalReviews(2)
                 .build();
-        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        when(productRepository.save(product)).thenReturn(product);
 
-        productService.updateReviewSummary(productId, new ReviewSummary("alice", 1, "bad"));
+        productService.saveProduct(product);
 
-        ArgumentCaptor<Product> captor = ArgumentCaptor.forClass(Product.class);
-        verify(productRepository).save(captor.capture());
-        Product saved = captor.getValue();
-        assertThat(saved.getTotalReviews()).isEqualTo(3);
-        assertThat(saved.getAverageRating()).isEqualByComparingTo("3.00");
-        assertThat(saved.getLatestReviews()).containsOnlyOnce("\"userName\"");
+        verify(outboxEventService).saveOutboxProductEvent(product, "product_created");
+        verify(outboxEventService, never()).saveOutboxProductAvailabilityEvent(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 }

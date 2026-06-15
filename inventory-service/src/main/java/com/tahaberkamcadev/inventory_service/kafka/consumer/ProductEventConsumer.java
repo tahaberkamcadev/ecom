@@ -10,11 +10,9 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.tahaberkamcadev.inventory_service.dto.ReviewSummary;
 import com.tahaberkamcadev.inventory_service.dto.StockAdjustment;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent.OrderItem;
-import com.tahaberkamcadev.inventory_service.kafka.event.inbound.ReviewEvent;
 import com.tahaberkamcadev.inventory_service.service.OutboxEventService;
 import com.tahaberkamcadev.inventory_service.service.ProcessedEventService;
 import com.tahaberkamcadev.inventory_service.service.ProductService;
@@ -76,44 +74,44 @@ public class ProductEventConsumer {
         ack.acknowledge();
     }
 
-    @KafkaListener(topics = "${app.kafka.topics.review-request}", groupId = "${spring.kafka.consumer.group-id}")
-    @Transactional
-    public void productReviewUpdate(@Payload String payload, Acknowledgment ack) {
-        ReviewEvent event;
-        try {
-            ObjectMapper objectMapper = new ObjectMapper();
-            event = objectMapper.readValue(payload, ReviewEvent.class);
-        } catch (Exception e) {
-            log.error("Failed to deserialize ReviewEvent: {}", payload, e);
-            ack.acknowledge();
-            return;
-        }
-        if (event.getEventId() == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
-        }
-        if (event.getProductId() == null) {
-            throw new IllegalArgumentException("productId cannot be null");
-        }
-        if (event.getUserName() == null) {
-            throw new IllegalArgumentException("userName cannot be null");
-        }
-        if (event.getRating() <= 0 || event.getRating() > 5) {
-            throw new IllegalArgumentException("rating must be between 1 and 5: " + event.getRating());
-        }
-        if (event.getComment() == null) {
-            throw new IllegalArgumentException("comment cannot be null");
-        }
+    // @KafkaListener(topics = "${app.kafka.topics.review-request}", groupId = "${spring.kafka.consumer.group-id}")
+    // @Transactional
+    // public void productReviewUpdate(@Payload String payload, Acknowledgment ack) {
+    //     ReviewEvent event;
+    //     try {
+    //         ObjectMapper objectMapper = new ObjectMapper();
+    //         event = objectMapper.readValue(payload, ReviewEvent.class);
+    //     } catch (Exception e) {
+    //         log.error("Failed to deserialize ReviewEvent: {}", payload, e);
+    //         ack.acknowledge();
+    //         return;
+    //     }
+    //     if (event.getEventId() == null) {
+    //         throw new IllegalArgumentException("eventId cannot be null");
+    //     }
+    //     if (event.getProductId() == null) {
+    //         throw new IllegalArgumentException("productId cannot be null");
+    //     }
+    //     if (event.getUserName() == null) {
+    //         throw new IllegalArgumentException("userName cannot be null");
+    //     }
+    //     if (event.getRating() <= 0 || event.getRating() > 5) {
+    //         throw new IllegalArgumentException("rating must be between 1 and 5: " + event.getRating());
+    //     }
+    //     if (event.getComment() == null) {
+    //         throw new IllegalArgumentException("comment cannot be null");
+    //     }
 
-        if (processedEventService.markIfNew(event.getEventId(), "review_added")) {
-            ReviewSummary reviewSummary = toReviewSummary(event);
+    //     if (processedEventService.markIfNew(event.getEventId(), "review_added")) {
+    //         ReviewSummary reviewSummary = toReviewSummary(event);
             
-            productService.updateReviewSummary(event.getProductId(), reviewSummary);
-            outboxEventService.saveOutboxReviewEvent("Inventory", event.getProductId().toString(), "review_added");
-        } else {
-            log.info("Duplicate review event received, ignoring. Event ID: {}", event.getEventId());
-        }
-        ack.acknowledge();
-    }
+    //         productService.updateReviewSummary(event.getProductId(), reviewSummary);
+    //         outboxEventService.saveOutboxReviewEvent("Inventory", event.getProductId().toString(), "review_added");
+    //     } else {
+    //         log.info("Duplicate review event received, ignoring. Event ID: {}", event.getEventId());
+    //     }
+    //     ack.acknowledge();
+    // }
 
 
     private StockAdjustment toAdjustment(OrderItem item) {
@@ -126,15 +124,15 @@ public class ProductEventConsumer {
         return new StockAdjustment(item.getProductId(), item.getQuantity());
     }
 
-    private ReviewSummary toReviewSummary(ReviewEvent event) {
-        if (event.getProductId() == null) {
-            throw new IllegalArgumentException("productId cannot be null");
-        }
-        if (event.getRating() <= 0 || event.getRating() > 5) {
-            throw new IllegalArgumentException("rating must be between 1 and 5: " + event.getRating());
-        }
-        return new ReviewSummary(event.getUserName(), event.getRating(), event.getComment());
-    }
+    // private ReviewSummary toReviewSummary(ReviewEvent event) {
+    //     if (event.getProductId() == null) {
+    //         throw new IllegalArgumentException("productId cannot be null");
+    //     }
+    //     if (event.getRating() <= 0 || event.getRating() > 5) {
+    //         throw new IllegalArgumentException("rating must be between 1 and 5: " + event.getRating());
+    //     }
+    //     return new ReviewSummary(event.getUserName(), event.getRating(), event.getComment());
+    // }
 
     @KafkaListener(
         topics = {
