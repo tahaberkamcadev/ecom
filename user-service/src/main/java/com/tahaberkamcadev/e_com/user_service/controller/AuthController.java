@@ -2,7 +2,6 @@ package com.tahaberkamcadev.e_com.user_service.controller;
 
 import com.tahaberkamcadev.e_com.user_service.dto.request.LoginRequest;
 import com.tahaberkamcadev.e_com.user_service.dto.request.RegisterRequest;
-import com.tahaberkamcadev.e_com.user_service.dto.request.VerifyEmailRequest;
 import com.tahaberkamcadev.e_com.user_service.dto.response.AuthResponse;
 import com.tahaberkamcadev.e_com.user_service.exception.ErrorResponse;
 import com.tahaberkamcadev.e_com.user_service.service.AuthService;
@@ -16,7 +15,10 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -52,31 +54,5 @@ public class AuthController {
     })
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
-    }
-
-    @PostMapping("/verify-email")
-    @Operation(summary = "Verify email", description = "Verify user email address with token")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Email verified successfully"),
-            @ApiResponse(responseCode = "400", description = "Invalid or expired token",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
-    public ResponseEntity<String> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
-        authService.verifyEmail(request);
-        return ResponseEntity.ok("Email verified successfully");
-    }
-
-    @PostMapping("/resend-verification")
-    @Operation(summary = "Resend verification email", description = "Resend email verification token")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Verification email sent"),
-            @ApiResponse(responseCode = "400", description = "Email already verified",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "User not found",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
-    public ResponseEntity<String> resendVerificationEmail(@RequestParam String email) {
-        authService.resendVerificationEmail(email);
-        return ResponseEntity.ok("Verification email sent");
     }
 }

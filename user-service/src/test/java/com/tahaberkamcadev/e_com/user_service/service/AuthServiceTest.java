@@ -9,7 +9,6 @@ import com.tahaberkamcadev.e_com.user_service.model.Role;
 import com.tahaberkamcadev.e_com.user_service.model.User;
 import com.tahaberkamcadev.e_com.user_service.repository.UserRepository;
 import com.tahaberkamcadev.e_com.user_service.security.JwtService;
-import com.tahaberkamcadev.e_com.user_service.service.impl.AuthServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -36,15 +35,16 @@ import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AuthService Unit Tests")
-class AuthServiceImplTest {
+class AuthServiceTest {
 
     @Mock private UserRepository userRepository;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private JwtService jwtService;
     @Mock private AuthenticationManager authenticationManager;
+    @Mock private OutboxEventService outboxEventService;
 
     @InjectMocks
-    private AuthServiceImpl authService;
+    private AuthService authService;
 
     private User savedUser;
 
@@ -78,6 +78,7 @@ class AuthServiceImplTest {
         assertThat(response.accessToken()).isEqualTo("mock.jwt.token");
         assertThat(response.tokenType()).isEqualTo("Bearer");
         assertThat(response.expiresIn()).isEqualTo(86400000L);
+        verify(outboxEventService).saveUserCreatedEvent(savedUser);
     }
 
     @Test
@@ -109,6 +110,7 @@ class AuthServiceImplTest {
                 .isInstanceOf(EmailAlreadyExistsException.class);
 
         verify(userRepository, never()).save(any());
+        verify(outboxEventService, never()).saveUserCreatedEvent(any());
     }
 
     @Test
@@ -153,7 +155,6 @@ class AuthServiceImplTest {
         LoginRequest request = new LoginRequest("john@example.com", "password123");
 
         given(userRepository.findByEmail("john@example.com")).willReturn(Optional.of(savedUser));
-        given(userRepository.save(any(User.class))).willReturn(savedUser);
         given(jwtService.generateToken(any(), any(User.class))).willReturn("mock.jwt.token");
         given(jwtService.getExpirationTime()).willReturn(86400000L);
 
@@ -171,7 +172,6 @@ class AuthServiceImplTest {
         LoginRequest request = new LoginRequest("  JOHN@EXAMPLE.COM  ", "password123");
 
         given(userRepository.findByEmail("john@example.com")).willReturn(Optional.of(savedUser));
-        given(userRepository.save(any(User.class))).willReturn(savedUser);
         given(jwtService.generateToken(any(), any(User.class))).willReturn("token");
         given(jwtService.getExpirationTime()).willReturn(86400000L);
 

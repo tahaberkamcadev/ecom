@@ -1,6 +1,7 @@
 services:
   postgres-user:
     image: postgres:17-alpine
+    command: ["postgres", "-c", "wal_level=logical"]
     environment:
       POSTGRES_DB: ${USER_DB_NAME}
       POSTGRES_USER: ${USER_DB_USER}
@@ -93,6 +94,8 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+      postgres-user:
+        condition: service_healthy
       postgres-inventory:
         condition: service_healthy
       postgres-payment:
@@ -127,6 +130,8 @@ services:
       - sh
       - -c
       - |
+        curl -s -X PUT http://connect:8083/connectors/user-outbox-connector/config \
+          -H "Content-Type: application/json" --data @/debezium/user-outbox-connector.json &&
         curl -s -X PUT http://connect:8083/connectors/inventory-outbox-connector/config \
           -H "Content-Type: application/json" --data @/debezium/inventory-outbox-connector.json &&
         curl -s -X PUT http://connect:8083/connectors/order-outbox-connector/config \

@@ -60,8 +60,7 @@ public class SecurityConfig {
                                 .includeSubDomains(true)))
                 .authorizeHttpRequests(auth -> {
                     auth.requestMatchers(PUBLIC_PATHS).permitAll();
-                    
-                    // Conditional Swagger access - only allow in dev environments
+
                     if (swaggerEnabled) {
                         auth.requestMatchers(SWAGGER_PATHS).permitAll();
                     }

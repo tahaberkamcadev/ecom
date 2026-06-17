@@ -7,7 +7,6 @@ import com.tahaberkamcadev.e_com.user_service.exception.UserNotFoundException;
 import com.tahaberkamcadev.e_com.user_service.model.Role;
 import com.tahaberkamcadev.e_com.user_service.model.User;
 import com.tahaberkamcadev.e_com.user_service.repository.UserRepository;
-import com.tahaberkamcadev.e_com.user_service.service.impl.UserServiceImpl;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -32,13 +31,14 @@ import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("UserService Unit Tests")
-class UserServiceImplTest {
+class UserServiceTest {
 
     @Mock private UserRepository userRepository;
     @Mock private PasswordEncoder passwordEncoder;
+    @Mock private OutboxEventService outboxEventService;
 
     @InjectMocks
-    private UserServiceImpl userService;
+    private UserService userService;
 
     private User customerUser;
     private User adminUser;
@@ -239,6 +239,7 @@ class UserServiceImplTest {
         userService.deleteUser(customerUser.getId());
 
         verify(userRepository).delete(customerUser);
+        verify(outboxEventService).saveUserDeletedEvent(customerUser.getId(), customerUser.getEmail());
     }
 
     @Test

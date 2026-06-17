@@ -2,7 +2,6 @@ package com.tahaberkamcadev.e_com.user_service.controller;
 
 import com.tahaberkamcadev.e_com.user_service.dto.request.ChangePasswordRequest;
 import com.tahaberkamcadev.e_com.user_service.dto.request.UpdateUserRequest;
-import com.tahaberkamcadev.e_com.user_service.dto.request.UpdateUserPreferencesRequest;
 import com.tahaberkamcadev.e_com.user_service.dto.response.UserResponse;
 import com.tahaberkamcadev.e_com.user_service.exception.ErrorResponse;
 import com.tahaberkamcadev.e_com.user_service.service.UserService;
@@ -17,7 +16,13 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.UUID;
@@ -33,8 +38,7 @@ public class UserController {
 
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "List all users", 
-               description = "Accessible by ADMIN role only. Note: Returns all users - consider pagination for large datasets")
+    @Operation(summary = "List all users", description = "Accessible by ADMIN role only")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "List retrieved successfully"),
             @ApiResponse(responseCode = "403", description = "Insufficient permissions",
@@ -96,7 +100,7 @@ public class UserController {
     }
 
     @PutMapping("/{id}")
-    @Operation(summary = "Update user", description = "First name, last name, or password can be updated. Users can update their own account; ADMIN can update any account.")
+    @Operation(summary = "Update user", description = "First name, last name, or password can be updated")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "User updated successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid request data",
@@ -125,18 +129,5 @@ public class UserController {
     public ResponseEntity<Void> deleteUser(@PathVariable UUID id) {
         userService.deleteUser(id);
         return ResponseEntity.noContent().build();
-    }
-
-    @PutMapping("/me/preferences")
-    @Operation(summary = "Update user preferences", description = "Update preferences like language, currency, consents")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Preferences updated successfully"),
-            @ApiResponse(responseCode = "400", description = "Invalid request data",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "401", description = "Authentication required",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
-    public ResponseEntity<UserResponse> updatePreferences(@Valid @RequestBody UpdateUserPreferencesRequest request) {
-        return ResponseEntity.ok(userService.updateCurrentUserPreferences(request));
     }
 }

@@ -13,7 +13,7 @@ import org.springframework.context.annotation.Configuration;
 @OpenAPIDefinition(
         info = @Info(
                 title = "E-Commerce User Service API",
-                description = "Production-ready user management microservice with JWT authentication, address management, and SAGA pattern support for e-commerce applications",
+                description = "User management microservice with JWT authentication and transactional outbox events",
                 version = "1.0.0",
                 contact = @Contact(
                         name = "tahaberkamcadev",

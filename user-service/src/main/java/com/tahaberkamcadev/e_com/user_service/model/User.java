@@ -1,7 +1,18 @@
 package com.tahaberkamcadev.e_com.user_service.model;
 
-import jakarta.persistence.*;
-import lombok.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.springframework.security.core.GrantedAuthority;
@@ -46,61 +57,6 @@ public class User implements UserDetails {
     @Builder.Default
     @Column(nullable = false)
     private boolean enabled = true;
-    
-    @Builder.Default
-    @Column(name = "email_verified")
-    private boolean emailVerified = false;
-    
-    @Column(name = "phone_number", length = 20)
-    private String phoneNumber;
-    
-    @Builder.Default
-    @Column(name = "phone_verified")
-    private boolean phoneVerified = false;
-    
-    @Column(name = "date_of_birth")
-    private LocalDateTime dateOfBirth;
-    
-    @Column(name = "gender", length = 10)
-    private String gender; // MALE, FEMALE, OTHER, PREFER_NOT_TO_SAY
-    
-    @Builder.Default
-    @Column(name = "preferred_language", length = 5)
-    private String preferredLanguage = "en-US";
-    
-    @Builder.Default
-    @Column(name = "preferred_currency", length = 3)
-    private String preferredCurrency = "USD";
-    
-    @Builder.Default
-    @Column(name = "marketing_consent")
-    private boolean marketingConsent = false;
-    
-    @Builder.Default
-    @Column(name = "sms_consent")
-    private boolean smsConsent = false;
-    
-    @Builder.Default
-    @Column(name = "email_consent")
-    private boolean emailConsent = true;
-    
-    @Builder.Default
-    @Enumerated(EnumType.STRING)
-    @Column(name = "user_type")
-    private UserType userType = UserType.REGULAR;
-    
-    @Column(name = "last_login_at")
-    private LocalDateTime lastLoginAt;
-    
-    @Builder.Default
-    @Column(name = "login_count")
-    private Long loginCount = 0L;
-    
-    @Column(name = "verification_token")
-    private String verificationToken;
-    
-    @Column(name = "verification_token_expires_at")
-    private LocalDateTime verificationTokenExpiresAt;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
