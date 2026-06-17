@@ -1,0 +1,23 @@
+{
+  "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+  "database.hostname": "postgres-review",
+  "database.port": "5432",
+  "database.user": "review",
+  "database.password": "review",
+  "database.dbname": "reviewdb",
+  "topic.prefix": "review",
+  "table.include.list": "public.outbox_events",
+  "plugin.name": "pgoutput",
+  "slot.name": "review_outbox_slot",
+  "publication.name": "review_outbox_pub",
+  "heartbeat.interval.ms": "0",
+  "tombstones.on.delete": "false",
+  "transforms": "outbox",
+  "transforms.outbox.type": "io.debezium.transforms.outbox.EventRouter",
+  "transforms.outbox.table.field.event.id": "id",
+  "transforms.outbox.table.field.event.key": "aggregateid",
+  "transforms.outbox.table.field.event.payload": "payload",
+  "transforms.outbox.table.field.event.type": "type",
+  "transforms.outbox.route.by.field": "type",
+  "transforms.outbox.route.topic.replacement": "saga.review.${routedByValue}"
+}

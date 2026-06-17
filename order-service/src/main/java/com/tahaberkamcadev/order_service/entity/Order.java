@@ -38,8 +38,7 @@ public class Order {
     private String orderItems;
 
     @Column(name = "total_price", nullable = false)
-    @Builder.Default
-    private BigDecimal totalPrice = BigDecimal.ZERO; // Initial price is unknown for order service, it will be calculated after inventory service produces stock.reserved event(containing item-based price information)
+    private BigDecimal totalPrice;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default

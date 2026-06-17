@@ -97,6 +97,8 @@ services:
         condition: service_healthy
       postgres-payment:
         condition: service_healthy
+      postgres-review:
+        condition: service_healthy
     ports:
       - "8083:8083"
     environment:
@@ -131,6 +133,8 @@ services:
           -H "Content-Type: application/json" --data @/debezium/order-outbox-connector.json &&
         curl -s -X PUT http://connect:8083/connectors/payment-outbox-connector/config \
           -H "Content-Type: application/json" --data @/debezium/payment-outbox-connector.json &&
+        curl -s -X PUT http://connect:8083/connectors/review-outbox-connector/config \
+          -H "Content-Type: application/json" --data @/debezium/review-outbox-connector.json &&
         echo connector-ready
 
   user-service:
@@ -236,6 +240,42 @@ services:
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       GATEWAY_SECRET: ${GATEWAY_SECRET}
 
+  postgres-review:
+    image: postgres:17-alpine
+    command: ["postgres", "-c", "wal_level=logical"]
+    environment:
+      POSTGRES_DB: ${REVIEW_DB_NAME}
+      POSTGRES_USER: ${REVIEW_DB_USER}
+      POSTGRES_PASSWORD: ${REVIEW_DB_PASSWORD}
+    ports:
+      - "5437:5432"
+    volumes:
+      - review_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U review -d reviewdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  review-service:
+    build:
+      context: ./review-service
+      dockerfile: Dockerfile
+    depends_on:
+      postgres-review:
+        condition: service_healthy
+      connect-init:
+        condition: service_completed_successfully
+    ports:
+      - "8086:8086"
+    environment:
+      SERVER_PORT: 8086
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-review:5432/${REVIEW_DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${REVIEW_DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${REVIEW_DB_PASSWORD}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      GATEWAY_SECRET: ${GATEWAY_SECRET}
+
   api-gateway:
     build:
       context: ./api-gateway
@@ -249,6 +289,8 @@ services:
         condition: service_started
       payment-service:
         condition: service_started
+      review-service:
+        condition: service_started
     ports:
       - "8080:8080"
     environment:
@@ -257,6 +299,7 @@ services:
       INVENTORY_SERVICE_URL: http://inventory-service:8082
       ORDER_SERVICE_URL: http://order-service:8083
       PAYMENT_SERVICE_URL: http://payment-service:8084
+      REVIEW_SERVICE_URL: http://review-service:8086
       JWT_SECRET: ${JWT_SECRET}
       GATEWAY_SECRET: ${GATEWAY_SECRET}
 
@@ -265,3 +308,4 @@ volumes:
   inventory_pg:
   order_pg:
   payment_pg:
+  review_pg:
