@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.UUID;
 
 import com.tahaberkamcadev.order_service.dto.OrderItem;
-import com.tahaberkamcadev.order_service.dto.ProductPrice;
 
 import lombok.Data;
 
@@ -23,8 +22,6 @@ public class InventoryEvent {
     private String eventType;
 
     private BigDecimal totalAmount;
-
-    private List<ProductPrice> itemPrices;
 
     private List<OrderItem> items;
 }

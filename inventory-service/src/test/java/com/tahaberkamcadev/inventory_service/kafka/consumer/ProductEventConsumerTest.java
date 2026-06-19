@@ -52,7 +52,7 @@ class ProductEventConsumerTest {
         consumer.productStockUpdate(toJson(event), ack);
 
         verify(productService).increaseMultipleStock(any());
-        verify(outboxEventService).saveOutboxEvent(eq("Inventory"), eq(event.getOrderId()), eq(event.getCustomerId()), any(), eq("stock_reverted"));
+        verify(outboxEventService).saveOutboxStockRevertedEvent(eq(event.getOrderId()), eq(event.getCustomerId()), any());
         verify(ack).acknowledge();
     }
 

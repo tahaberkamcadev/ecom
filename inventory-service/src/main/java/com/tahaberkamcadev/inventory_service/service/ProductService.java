@@ -1,7 +1,6 @@
 package com.tahaberkamcadev.inventory_service.service;
 
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.tahaberkamcadev.inventory_service.repository.ProductRepository;
@@ -65,7 +64,7 @@ public class ProductService {
             publishOutOfStockIfDepleted(item.getProductId());
         }
         OrderPriceResponse priceResponse = getOrderPrice(items);
-        outboxEventService.saveOutboxReservedEvent("Inventory", orderId, customerId, items, priceResponse.getItemPrices(), "stock_updated");
+        outboxEventService.saveOutboxReservedEvent("Inventory", orderId, customerId, items, priceResponse.getPrice(), "stock_updated");
         return OrderPriceResponse.builder()
                 .price(priceResponse.getPrice())
                 .orderId(orderId)
@@ -126,20 +125,6 @@ public class ProductService {
         } else {
             throw new IllegalArgumentException("No such product exists: " + productId);
         }
-    }
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void reserve(List<StockAdjustment> adjustments, String aggregateType,
-            UUID orderId, UUID customerId, OrderEvent event) {
-        for (StockAdjustment adjustment : adjustments) {
-            int updated = productRepository.tryDecreaseStock(adjustment.productId(), adjustment.quantity());
-            if (updated == 0) {
-                log.warn("Insufficient stock for productId={} quantity={}", adjustment.productId(), adjustment.quantity());
-                throw new InsufficientStockException("Insufficient stock for product: " + adjustment.productId());
-            }
-            publishOutOfStockIfDepleted(adjustment.productId());
-        }
-        outboxEventService.saveOutboxEvent(aggregateType, orderId, customerId, event, "stock_updated");
     }
 
     @Transactional

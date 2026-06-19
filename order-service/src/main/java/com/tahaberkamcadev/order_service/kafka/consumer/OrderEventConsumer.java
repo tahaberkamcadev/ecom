@@ -112,7 +112,6 @@ public class OrderEventConsumer {
     @KafkaListener(
         topics = {
             "${app.kafka.topics.stock-updated-dlt}",
-            "${app.kafka.topics.stock-failed-dlt}",
             "${app.kafka.topics.payment-failed-dlt}",
             "${app.kafka.topics.payment-completed-dlt}"
         },
