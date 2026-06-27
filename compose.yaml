@@ -281,6 +281,58 @@ services:
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       GATEWAY_SECRET: ${GATEWAY_SECRET}
 
+  postgres-projection:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${PROJECTION_DB_NAME}
+      POSTGRES_USER: ${PROJECTION_DB_USER}
+      POSTGRES_PASSWORD: ${PROJECTION_DB_PASSWORD}
+    ports:
+      - "5438:5432"
+    volumes:
+      - projection_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U projection -d projectiondb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis-projection:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  projection-service:
+    build:
+      context: ./projection-service
+      dockerfile: Dockerfile
+    depends_on:
+      postgres-projection:
+        condition: service_healthy
+      redis-projection:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8087:8087"
+    environment:
+      SERVER_PORT: 8087
+      SPRING_DOCKER_COMPOSE_ENABLED: "false"
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-projection:5432/${PROJECTION_DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${PROJECTION_DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${PROJECTION_DB_PASSWORD}
+      SPRING_DATA_REDIS_HOST: redis-projection
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_KAFKA_CONSUMER_GROUP_ID: projection-service
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      GATEWAY_SECRET: ${GATEWAY_SECRET}
+
   api-gateway:
     build:
       context: ./api-gateway
@@ -296,6 +348,8 @@ services:
         condition: service_started
       review-service:
         condition: service_started
+      projection-service:
+        condition: service_started
     ports:
       - "8080:8080"
     environment:
@@ -305,6 +359,7 @@ services:
       ORDER_SERVICE_URL: http://order-service:8083
       PAYMENT_SERVICE_URL: http://payment-service:8084
       REVIEW_SERVICE_URL: http://review-service:8086
+      PROJECTION_SERVICE_URL: http://projection-service:8087
       JWT_SECRET: ${JWT_SECRET}
       GATEWAY_SECRET: ${GATEWAY_SECRET}
 
@@ -314,3 +369,4 @@ volumes:
   order_pg:
   payment_pg:
   review_pg:
+  projection_pg:

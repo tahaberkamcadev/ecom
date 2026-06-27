@@ -22,7 +22,6 @@ public class ProcessedEventService {
 
     private final ProcessedEventRepository processedEventRepository;
 
-    @Transactional
     public boolean markIfNew(UUID eventId, String eventType) {
         return processedEventRepository.insertIfAbsent(eventId, eventType, Instant.now()) > 0;
     }

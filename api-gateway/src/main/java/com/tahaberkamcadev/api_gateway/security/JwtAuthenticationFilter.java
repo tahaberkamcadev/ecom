@@ -101,7 +101,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         return path.startsWith("/api/v1/auth/")
                 || path.equals("/actuator/health")
                 || path.equals("/actuator/info")
-                || ("GET".equalsIgnoreCase(method) && path.startsWith("/api/products"));
+                || ("GET".equalsIgnoreCase(method) && path.startsWith("/api/products"))
+                || ("GET".equalsIgnoreCase(method) && path.startsWith("/api/catalog/products"));
     }
 
     private void sendErrorResponse(HttpServletResponse response, int status, String message) throws IOException {
