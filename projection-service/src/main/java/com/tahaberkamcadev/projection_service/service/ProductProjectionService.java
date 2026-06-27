@@ -100,7 +100,10 @@ public class ProductProjectionService {
     }
 
     @Transactional
-    @CacheEvict(cacheNames = CacheNames.PRODUCT_BY_ID, key = "#productId")
+    @Caching(evict = {
+            @CacheEvict(cacheNames = CacheNames.PRODUCT_BY_ID, key = "#productId"),
+            @CacheEvict(cacheNames = CacheNames.PRODUCTS_BY_CATEGORY, allEntries = true)
+    })
     public void addReview(
             UUID reviewId,
             UUID productId,

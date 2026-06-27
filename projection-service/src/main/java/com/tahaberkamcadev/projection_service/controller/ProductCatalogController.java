@@ -49,7 +49,7 @@ public class ProductCatalogController {
 
     @GetMapping("/{productId}/reviews")
     public ResponseEntity<List<ReviewSnippetResponse>> getProductReviews(@PathVariable UUID productId) {
-        if (productQueryService.findProductById(productId).isEmpty()) {
+        if (!productQueryService.productExists(productId)) {
             throw new ResourceNotFoundException("Product not found: " + productId);
         }
 

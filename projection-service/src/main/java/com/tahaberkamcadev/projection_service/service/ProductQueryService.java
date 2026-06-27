@@ -27,8 +27,7 @@ public class ProductQueryService {
 
     @Cacheable(
             cacheNames = CacheNames.PRODUCT_BY_ID,
-            key = "#productId",
-            unless = "#result == null || #result.isEmpty()"
+            key = "#productId"
     )
     public Optional<ProductView> findProductById(UUID productId) {
         return productViewRepository.findById(productId);
@@ -44,5 +43,9 @@ public class ProductQueryService {
 
     public List<ProductReviewView> findReviewsByProductId(UUID productId) {
         return productReviewViewRepository.findByProductIdOrderByCreatedAtDesc(productId);
+    }
+
+    public boolean productExists(UUID productId) {
+        return productViewRepository.existsById(productId);
     }
 }

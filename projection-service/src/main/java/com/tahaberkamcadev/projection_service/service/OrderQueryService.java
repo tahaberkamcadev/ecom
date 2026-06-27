@@ -34,6 +34,15 @@ public class OrderQueryService {
                 ));
     }
 
+    public Optional<OrderDetailQueryResult> findOrderDetailForUser(UUID orderId, UUID userId) {
+        return orderViewRepository.findById(orderId)
+                .filter(order -> order.getUserId().equals(userId))
+                .map(order -> new OrderDetailQueryResult(
+                        order,
+                        orderLineItemViewRepository.findAllByOrderId(orderId)
+                ));
+    }
+
     public record OrderDetailQueryResult(OrderView order, List<OrderLineItemView> lineItems) {
     }
 }

@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.tahaberkamcadev.projection_service.dto.response.OrderDetailResponse;
 import com.tahaberkamcadev.projection_service.dto.response.OrderSummaryResponse;
-import com.tahaberkamcadev.projection_service.exception.ForbiddenAccessException;
 import com.tahaberkamcadev.projection_service.exception.ResourceNotFoundException;
 import com.tahaberkamcadev.projection_service.mapper.CatalogMapper;
 import com.tahaberkamcadev.projection_service.service.OrderQueryService;
@@ -43,12 +42,8 @@ public class OrderCatalogController {
             @RequestHeader("X-User-Id") UUID userId,
             @PathVariable UUID orderId
     ) {
-        OrderDetailQueryResult result = orderQueryService.findOrderDetail(orderId)
+        OrderDetailQueryResult result = orderQueryService.findOrderDetailForUser(orderId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found: " + orderId));
-
-        if (!result.order().getUserId().equals(userId)) {
-            throw new ForbiddenAccessException("You do not have access to this order");
-        }
 
         return ResponseEntity.ok(catalogMapper.toOrderDetail(result));
     }
