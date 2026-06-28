@@ -100,7 +100,6 @@ class ProductCatalogControllerTest {
         mockMvc.perform(get("/api/catalog/products/search")
                         .param("q", "wireless")
                         .param("category", "ELECTRONICS")
-                        .param("active", "true")
                         .param("page", "0")
                         .param("size", "20")
                         .header("X-Gateway-Secret", GATEWAY_SECRET))

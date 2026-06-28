@@ -42,7 +42,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (isPublicPath(path, method)) {
             log.debug("Public path, skipping JWT check: {} {}", method, path);
-            MutableHttpServletRequest mutableRequest = new MutableHttpServletRequest(request);
+            MutableHttpServletRequest mutableRequest = stripUntrustedHeaders(request);
             mutableRequest.putHeader("X-Gateway-Secret", gatewaySecret);
             chain.doFilter(mutableRequest, response);
             return;
@@ -78,7 +78,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
             SecurityContextHolder.getContext().setAuthentication(auth);
 
-            MutableHttpServletRequest mutableRequest = new MutableHttpServletRequest(request);
+            if ("POST".equalsIgnoreCase(method) && "/api/products".equals(path) && !"ADMIN".equals(role)) {
+                sendForbiddenResponse(response, "Admin role required");
+                return;
+            }
+
+            MutableHttpServletRequest mutableRequest = stripUntrustedHeaders(request);
             mutableRequest.putHeader("X-Gateway-Secret", gatewaySecret);
             mutableRequest.putHeader("X-User-Email", email);
             if (userId != null) {
@@ -105,11 +110,28 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 || ("GET".equalsIgnoreCase(method) && path.startsWith("/api/catalog/products"));
     }
 
+    private MutableHttpServletRequest stripUntrustedHeaders(HttpServletRequest request) {
+        MutableHttpServletRequest mutableRequest = new MutableHttpServletRequest(request);
+        mutableRequest.removeHeader("X-User-Id");
+        mutableRequest.removeHeader("X-User-Role");
+        mutableRequest.removeHeader("X-User-Email");
+        mutableRequest.removeHeader("X-Gateway-Secret");
+        return mutableRequest;
+    }
+
     private void sendErrorResponse(HttpServletResponse response, int status, String message) throws IOException {
         response.setStatus(status);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.getWriter().write(
                 "{\"error\":\"Unauthorized\",\"message\":\"" + message + "\"}"
+        );
+    }
+
+    private void sendForbiddenResponse(HttpServletResponse response, String message) throws IOException {
+        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.getWriter().write(
+                "{\"error\":\"Forbidden\",\"message\":\"" + message + "\"}"
         );
     }
 }

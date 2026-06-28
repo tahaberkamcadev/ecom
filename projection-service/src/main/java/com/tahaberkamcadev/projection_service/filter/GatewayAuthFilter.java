@@ -24,11 +24,6 @@ public class GatewayAuthFilter extends OncePerRequestFilter {
     private String gatewaySecret;
 
     @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
-        return request.getRequestURI().startsWith("/actuator");
-    }
-
-    @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         String provided = request.getHeader("X-Gateway-Secret");

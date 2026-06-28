@@ -159,6 +159,7 @@ services:
       KAFKA_ENABLED: "false"
       EVENTS_ENABLED: "false"
       GATEWAY_SECRET: ${GATEWAY_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
 
   inventory-service:
     build:

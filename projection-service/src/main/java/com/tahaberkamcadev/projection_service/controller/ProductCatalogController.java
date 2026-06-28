@@ -32,10 +32,9 @@ public class ProductCatalogController {
 
     @GetMapping
     public ResponseEntity<List<ProductSummaryResponse>> listProducts(
-            @RequestParam ProductCategory category,
-            @RequestParam(defaultValue = "true") boolean active
+            @RequestParam ProductCategory category
     ) {
-        List<ProductSummaryResponse> products = productQueryService.findByCategoryAndActive(category, active).stream()
+        List<ProductSummaryResponse> products = productQueryService.findByCategoryAndActive(category, true).stream()
                 .map(catalogMapper::toSummary)
                 .toList();
         return ResponseEntity.ok(products);
@@ -45,11 +44,10 @@ public class ProductCatalogController {
     public ResponseEntity<ProductSearchPageResponse> searchProducts(
             @RequestParam(required = false) String q,
             @RequestParam(required = false) ProductCategory category,
-            @RequestParam(required = false) Boolean active,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        return ResponseEntity.ok(productQueryService.searchProducts(q, category, active, page, size));
+        return ResponseEntity.ok(productQueryService.searchProducts(q, category, true, page, size));
     }
 
     @GetMapping("/{productId}")

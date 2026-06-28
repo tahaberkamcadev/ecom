@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.tahaberkamcadev.inventory_service.dto.OrderPriceResponse;
 import com.tahaberkamcadev.inventory_service.dto.PurchaseRequest;
 import com.tahaberkamcadev.inventory_service.entity.Product;
+import com.tahaberkamcadev.inventory_service.exception.ForbiddenAccessException;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent.OrderItem;
 import com.tahaberkamcadev.inventory_service.service.ProductService;
 
@@ -26,7 +27,12 @@ public class ProductController {
     private final ProductService productService;
 
     @PostMapping
-    public ResponseEntity<Product> createProduct(@RequestBody Product product) {
+    public ResponseEntity<Product> createProduct(
+            @RequestHeader("X-User-Role") String role,
+            @RequestBody Product product) {
+        if (!"ADMIN".equals(role)) {
+            throw new ForbiddenAccessException("Only admins can create products");
+        }
         productService.saveProduct(product);
         return ResponseEntity.ok(product);
     }

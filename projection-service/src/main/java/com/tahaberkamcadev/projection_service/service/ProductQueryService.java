@@ -34,7 +34,8 @@ public class ProductQueryService {
             key = "#productId"
     )
     public Optional<ProductView> findProductById(UUID productId) {
-        return productViewRepository.findById(productId);
+        return productViewRepository.findById(productId)
+                .filter(ProductView::isActive);
     }
 
     @Cacheable(
@@ -50,7 +51,7 @@ public class ProductQueryService {
     }
 
     public boolean productExists(UUID productId) {
-        return productViewRepository.existsById(productId);
+        return findProductById(productId).isPresent();
     }
 
     public ProductSearchPageResponse searchProducts(
