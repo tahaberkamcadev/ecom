@@ -14,7 +14,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 
 import com.tahaberkamcadev.projection_service.dto.response.ProductSearchPageResponse;
-import com.tahaberkamcadev.projection_service.dto.response.ProductSummaryResponse;
 import com.tahaberkamcadev.projection_service.enums.ProductCategory;
 import com.tahaberkamcadev.projection_service.exception.SearchUnavailableException;
 import com.tahaberkamcadev.projection_service.repository.ProductReviewViewRepository;

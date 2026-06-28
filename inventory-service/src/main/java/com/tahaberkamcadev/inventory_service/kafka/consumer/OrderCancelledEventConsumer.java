@@ -24,53 +24,43 @@ import tools.jackson.databind.ObjectMapper;
 @Component
 @Slf4j
 @RequiredArgsConstructor
-public class ProductEventConsumer {
+public class OrderCancelledEventConsumer {
+
+    private static final String EVENT_TYPE = "order_cancelled";
 
     private final ProductService productService;
     private final ProcessedEventService processedEventService;
     private final OutboxEventService outboxEventService;
 
-    @KafkaListener(topics = "${app.kafka.topics.reserve-request}", groupId = "${spring.kafka.consumer.group-id}")
+    @KafkaListener(topics = "${app.kafka.topics.order-cancelled}", groupId = "${spring.kafka.consumer.group-id}")
     @Transactional
-    public void productStockUpdate(@Payload String payload, Acknowledgment ack) {
+    public void consumeOrderCancelledEvent(@Payload String payload, Acknowledgment ack) {
         OrderEvent event;
         try {
-            ObjectMapper objectMapper = new ObjectMapper();
-            event = objectMapper.readValue(payload, OrderEvent.class);
+            event = new ObjectMapper().readValue(payload, OrderEvent.class);
         } catch (Exception e) {
             log.error("Failed to deserialize OrderEvent: {}", payload, e);
             ack.acknowledge();
             return;
         }
 
-        if (event.getEventId() == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
-        }
-        if (event.getOrderId() == null) {
-            throw new IllegalArgumentException("orderId cannot be null");
-        }
-        if (event.getItems() == null || event.getItems().isEmpty()) {
-            throw new IllegalArgumentException("order items cannot be null or empty");
+        if (event.getEventId() == null || event.getOrderId() == null || event.getCustomerId() == null
+                || !EVENT_TYPE.equals(event.getEventType())
+                || event.getItems() == null || event.getItems().isEmpty()) {
+            throw new IllegalArgumentException("Received invalid order_cancelled event: " + event);
         }
 
         List<StockAdjustment> adjustments = event.getItems().stream()
                 .map(this::toAdjustment)
                 .toList();
 
-        log.info("Received stock update message: {} for order {}", event.getEventType(), event.getOrderId());
-
-        if ("order_cancelled".equals(event.getEventType())) {
-            if (processedEventService.markIfNew(event.getEventId(), "stock_reverted")) {
-                productService.increaseMultipleStock(adjustments);
-                outboxEventService.saveOutboxStockRevertedEvent(event.getOrderId(), event.getCustomerId(), event);
-            } else {
-                log.info("Duplicate stock update event received, ignoring. Event ID: {}", event.getEventId());
-            }
-            ack.acknowledge();
-            return;
+        if (processedEventService.markIfNew(event.getEventId(), EVENT_TYPE)) {
+            productService.increaseMultipleStock(adjustments);
+            outboxEventService.saveOutboxStockRevertedEvent(event.getOrderId(), event.getCustomerId(), event);
+            log.info("Stock reverted for cancelled order {}", event.getOrderId());
+        } else {
+            log.info("Duplicate order_cancelled event received, ignoring. Event ID: {}", event.getEventId());
         }
-
-        log.warn("Unknown event type: {}", event.getEventType());
         ack.acknowledge();
     }
 
@@ -85,7 +75,7 @@ public class ProductEventConsumer {
     }
 
     @KafkaListener(
-        topics = "${app.kafka.topics.reserve-request-dlt}",
+        topics = "${app.kafka.topics.order-cancelled-dlt}",
         groupId = "${spring.kafka.consumer.group-id}-dlt"
     )
     public void handleDlt(

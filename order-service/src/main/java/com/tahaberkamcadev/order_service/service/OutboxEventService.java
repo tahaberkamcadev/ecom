@@ -1,6 +1,8 @@
 package com.tahaberkamcadev.order_service.service;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -25,19 +27,32 @@ public class OutboxEventService {
 
     @Transactional
     public void saveOutboxEvent(UUID orderId, UUID customerId, String eventType, List<OrderItem> items) {
+        persist(orderId, customerId, eventType, items, null);
+    }
+
+    @Transactional
+    public void saveOutboxEvent(UUID orderId, UUID customerId, String eventType, List<OrderItem> items, BigDecimal totalAmount) {
+        persist(orderId, customerId, eventType, items, totalAmount);
+    }
+
+    private void persist(UUID orderId, UUID customerId, String eventType, List<OrderItem> items, BigDecimal totalAmount) {
         ObjectMapper mapper = new ObjectMapper();
 
         UUID eventId = UUID.randomUUID();
         Instant now = Instant.now();
 
-        String payload = mapper.writeValueAsString(Map.of(
-            "eventId",    eventId.toString(),
-            "orderId",    orderId.toString(),
-            "customerId", customerId.toString(),
-            "eventType",  eventType,
-            "timestamp",  now.toString(),
-            "items",      items
-        ));
+        Map<String, Object> payloadData = new HashMap<>();
+        payloadData.put("eventId", eventId.toString());
+        payloadData.put("orderId", orderId.toString());
+        payloadData.put("customerId", customerId.toString());
+        payloadData.put("eventType", eventType);
+        payloadData.put("timestamp", now.toString());
+        payloadData.put("items", items);
+        if (totalAmount != null) {
+            payloadData.put("totalAmount", totalAmount);
+        }
+
+        String payload = mapper.writeValueAsString(payloadData);
 
         outboxEventRepository.save(
             OutboxEvent.builder()

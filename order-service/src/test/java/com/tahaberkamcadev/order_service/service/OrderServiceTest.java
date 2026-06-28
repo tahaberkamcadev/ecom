@@ -18,8 +18,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.tahaberkamcadev.order_service.dto.OrderItem;
+import com.tahaberkamcadev.order_service.dto.OrderResponse;
 import com.tahaberkamcadev.order_service.dto.OrderStatus;
 import com.tahaberkamcadev.order_service.entity.Order;
+import com.tahaberkamcadev.order_service.exception.OrderNotFoundException;
 import com.tahaberkamcadev.order_service.kafka.event.inbound.InventoryEvent;
 import com.tahaberkamcadev.order_service.repository.OrderRepository;
 
@@ -72,7 +74,59 @@ class OrderServiceTest {
         when(orderRepository.findById(orderId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> orderService.updateOrderStatus(orderId, OrderStatus.PROCESSING))
-                .isInstanceOf(RuntimeException.class)
+                .isInstanceOf(OrderNotFoundException.class)
+                .hasMessageContaining("Order not found");
+    }
+
+    @Test
+    void getOrder_shouldReturnOrderForOwner() {
+        UUID userId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        UUID productId = UUID.randomUUID();
+        Order order = Order.builder()
+                .id(orderId)
+                .userId(userId)
+                .status(OrderStatus.PROCESSING)
+                .orderItems("[{\"productId\":\"" + productId + "\",\"quantity\":1}]")
+                .totalPrice(new BigDecimal("99.99"))
+                .build();
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+
+        OrderResponse response = orderService.getOrder(orderId, userId);
+
+        assertThat(response.orderId()).isEqualTo(orderId);
+        assertThat(response.status()).isEqualTo(OrderStatus.PROCESSING);
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().getFirst().getProductId()).isEqualTo(productId);
+    }
+
+    @Test
+    void getOrder_shouldThrowWhenOrderNotFound() {
+        UUID userId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        when(orderRepository.findById(orderId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> orderService.getOrder(orderId, userId))
+                .isInstanceOf(OrderNotFoundException.class)
+                .hasMessageContaining("Order not found");
+    }
+
+    @Test
+    void getOrder_shouldThrowWhenOrderBelongsToAnotherUser() {
+        UUID ownerId = UUID.randomUUID();
+        UUID otherUserId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        Order order = Order.builder()
+                .id(orderId)
+                .userId(ownerId)
+                .status(OrderStatus.PROCESSING)
+                .orderItems("[]")
+                .totalPrice(new BigDecimal("10"))
+                .build();
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.getOrder(orderId, otherUserId))
+                .isInstanceOf(OrderNotFoundException.class)
                 .hasMessageContaining("Order not found");
     }
 

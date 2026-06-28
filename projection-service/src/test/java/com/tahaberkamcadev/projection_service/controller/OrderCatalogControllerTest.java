@@ -1,6 +1,6 @@
 package com.tahaberkamcadev.projection_service.controller;
 
-import static org.mockito.ArgumentMatchers.eq;
+
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -28,6 +28,7 @@ import com.tahaberkamcadev.projection_service.enums.OrderStatus;
 import com.tahaberkamcadev.projection_service.mapper.CatalogMapper;
 import com.tahaberkamcadev.projection_service.service.OrderQueryService;
 import com.tahaberkamcadev.projection_service.service.OrderQueryService.OrderDetailQueryResult;
+import com.tahaberkamcadev.projection_service.service.OrderQueryService.OrderPageQueryResult;
 
 @WebMvcTest(controllers = OrderCatalogController.class)
 class OrderCatalogControllerTest {
@@ -58,14 +59,35 @@ class OrderCatalogControllerTest {
                 orderView.getUpdatedAt()
         );
 
-        when(orderQueryService.findOrdersByUserId(userId)).thenReturn(List.of(orderView));
+        when(orderQueryService.findOrdersByUserId(userId, 0, 20))
+                .thenReturn(new OrderPageQueryResult(List.of(orderView), 1, 0, 20));
         when(catalogMapper.toOrderSummary(orderView)).thenReturn(summary);
 
         mockMvc.perform(get("/api/catalog/orders")
                         .header("X-Gateway-Secret", GATEWAY_SECRET)
                         .header("X-User-Id", userId.toString()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].status").value("DELIVERED"));
+                .andExpect(jsonPath("$.items[0].status").value("DELIVERED"))
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20));
+    }
+
+    @Test
+    void listMyOrders_returnsEmptyPageWhenUserHasNoOrders() throws Exception {
+        UUID userId = UUID.randomUUID();
+
+        when(orderQueryService.findOrdersByUserId(userId, 0, 5))
+                .thenReturn(new OrderPageQueryResult(List.of(), 0, 0, 5));
+
+        mockMvc.perform(get("/api/catalog/orders")
+                        .param("page", "0")
+                        .param("size", "5")
+                        .header("X-Gateway-Secret", GATEWAY_SECRET)
+                        .header("X-User-Id", userId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items").isEmpty())
+                .andExpect(jsonPath("$.total").value(0));
     }
 
     @Test
@@ -84,7 +106,6 @@ class OrderCatalogControllerTest {
 
     @Test
     void getOrder_returnsNotFoundForAnotherUsersOrder() throws Exception {
-        UUID ownerId = UUID.randomUUID();
         UUID otherUserId = UUID.randomUUID();
         UUID orderId = UUID.randomUUID();
 

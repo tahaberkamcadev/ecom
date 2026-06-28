@@ -19,5 +19,5 @@
   "transforms.outbox.table.field.event.payload": "payload",
   "transforms.outbox.table.field.event.type": "type",
   "transforms.outbox.route.by.field": "type",
-  "transforms.outbox.route.topic.replacement": "saga.inventory.reserve.request"
+  "transforms.outbox.route.topic.replacement": "saga.order.${routedByValue}"
 }

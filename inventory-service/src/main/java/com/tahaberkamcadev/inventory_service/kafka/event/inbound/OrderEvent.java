@@ -14,7 +14,7 @@ public class OrderEvent {
     private UUID eventId; // unique identifier for the event, used for idempotency checks
     private UUID orderId;
     private UUID customerId;
-    private String eventType; // "order_created" or "order_cancelled"
+    private String eventType;
     private Instant timestamp;
     private List<OrderItem> items;
 

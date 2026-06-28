@@ -8,14 +8,17 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.tahaberkamcadev.projection_service.dto.response.OrderDetailResponse;
+import com.tahaberkamcadev.projection_service.dto.response.OrderPageResponse;
 import com.tahaberkamcadev.projection_service.dto.response.OrderSummaryResponse;
 import com.tahaberkamcadev.projection_service.exception.ResourceNotFoundException;
 import com.tahaberkamcadev.projection_service.mapper.CatalogMapper;
 import com.tahaberkamcadev.projection_service.service.OrderQueryService;
 import com.tahaberkamcadev.projection_service.service.OrderQueryService.OrderDetailQueryResult;
+import com.tahaberkamcadev.projection_service.service.OrderQueryService.OrderPageQueryResult;
 
 import lombok.RequiredArgsConstructor;
 
@@ -28,13 +31,16 @@ public class OrderCatalogController {
     private final CatalogMapper catalogMapper;
 
     @GetMapping
-    public ResponseEntity<List<OrderSummaryResponse>> listMyOrders(
-            @RequestHeader("X-User-Id") UUID userId
+    public ResponseEntity<OrderPageResponse> listMyOrders(
+            @RequestHeader("X-User-Id") UUID userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
     ) {
-        List<OrderSummaryResponse> orders = orderQueryService.findOrdersByUserId(userId).stream()
+        OrderPageQueryResult result = orderQueryService.findOrdersByUserId(userId, page, size);
+        List<OrderSummaryResponse> items = result.orders().stream()
                 .map(catalogMapper::toOrderSummary)
                 .toList();
-        return ResponseEntity.ok(orders);
+        return ResponseEntity.ok(new OrderPageResponse(items, result.total(), result.page(), result.size()));
     }
 
     @GetMapping("/{orderId}")

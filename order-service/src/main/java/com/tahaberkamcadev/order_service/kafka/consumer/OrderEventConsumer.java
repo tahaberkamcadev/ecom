@@ -49,6 +49,13 @@ public class OrderEventConsumer {
 
         if (processedEventService.markIfNew(event.getEventId(), "stock_reserved")) {
             orderService.createOrderFromEvent(event);
+            outboxEventService.saveOutboxEvent(
+                    event.getOrderId(),
+                    event.getCustomerId(),
+                    "order_created",
+                    event.getItems(),
+                    event.getTotalAmount()
+            );
             log.info("Order {} created in PROCESSING state.", event.getOrderId());
         } else {
             log.info("Duplicate stock reserved event received, ignoring. Event ID: {}", event.getEventId());
@@ -76,7 +83,12 @@ public class OrderEventConsumer {
         if (processedEventService.markIfNew(event.getEventId(), "payment_failed")) {
             orderService.updateOrderStatus(event.getOrderId(), OrderStatus.CANCELLED);
             List<OrderItem> items = orderService.getOrderItems(event.getOrderId());
-            outboxEventService.saveOutboxEvent(event.getOrderId(), event.getCustomerId(), "order_cancelled", items);
+            outboxEventService.saveOutboxEvent(
+                    event.getOrderId(),
+                    event.getCustomerId(),
+                    "order_cancelled",
+                    items
+            );
             log.info("Order {} cancelled, stock rollback event published.", event.getOrderId());
         } else {
             log.info("Duplicate payment failed event received, ignoring. Event ID: {}", event.getEventId());

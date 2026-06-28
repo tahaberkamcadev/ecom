@@ -27,7 +27,7 @@ import com.tahaberkamcadev.inventory_service.service.ProductService;
 import tools.jackson.databind.ObjectMapper;
 
 @ExtendWith(MockitoExtension.class)
-class ProductEventConsumerTest {
+class OrderCancelledEventConsumerTest {
 
     @Mock
     private ProductService productService;
@@ -42,14 +42,14 @@ class ProductEventConsumerTest {
     private Acknowledgment ack;
 
     @InjectMocks
-    private ProductEventConsumer consumer;
+    private OrderCancelledEventConsumer consumer;
 
     @Test
-    void productStockUpdate_shouldRevertStockOnOrderCancelled() {
-        OrderEvent event = createEvent("order_cancelled", 2);
-        when(processedEventService.markIfNew(event.getEventId(), "stock_reverted")).thenReturn(true);
+    void consumeOrderCancelledEvent_shouldRevertStock() {
+        OrderEvent event = createEvent(2);
+        when(processedEventService.markIfNew(event.getEventId(), "order_cancelled")).thenReturn(true);
 
-        consumer.productStockUpdate(toJson(event), ack);
+        consumer.consumeOrderCancelledEvent(toJson(event), ack);
 
         verify(productService).increaseMultipleStock(any());
         verify(outboxEventService).saveOutboxStockRevertedEvent(eq(event.getOrderId()), eq(event.getCustomerId()), any());
@@ -57,23 +57,45 @@ class ProductEventConsumerTest {
     }
 
     @Test
-    void productStockUpdate_shouldIgnoreDuplicateCancelledEvents() {
-        OrderEvent event = createEvent("order_cancelled", 1);
-        when(processedEventService.markIfNew(event.getEventId(), "stock_reverted")).thenReturn(false);
+    void consumeOrderCancelledEvent_shouldIgnoreDuplicateEvents() {
+        OrderEvent event = createEvent(1);
+        when(processedEventService.markIfNew(event.getEventId(), "order_cancelled")).thenReturn(false);
 
-        consumer.productStockUpdate(toJson(event), ack);
+        consumer.consumeOrderCancelledEvent(toJson(event), ack);
 
         verify(productService, never()).increaseMultipleStock(any());
         verify(ack).acknowledge();
     }
 
     @Test
-    void productStockUpdate_shouldThrowForInvalidQuantity() {
-        OrderEvent event = createEvent("order_cancelled", 0);
+    void consumeOrderCancelledEvent_shouldThrowForInvalidQuantity() {
+        OrderEvent event = createEvent(0);
 
-        assertThatThrownBy(() -> consumer.productStockUpdate(toJson(event), ack))
+        assertThatThrownBy(() -> consumer.consumeOrderCancelledEvent(toJson(event), ack))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("quantity must be positive");
+        verify(ack, never()).acknowledge();
+    }
+
+    @Test
+    void consumeOrderCancelledEvent_shouldThrowForMissingCustomerId() {
+        OrderEvent event = createEvent(1);
+        event.setCustomerId(null);
+
+        assertThatThrownBy(() -> consumer.consumeOrderCancelledEvent(toJson(event), ack))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("invalid order_cancelled event");
+        verify(ack, never()).acknowledge();
+    }
+
+    @Test
+    void consumeOrderCancelledEvent_shouldThrowForWrongEventType() {
+        OrderEvent event = createEvent(1);
+        event.setEventType("order_created");
+
+        assertThatThrownBy(() -> consumer.consumeOrderCancelledEvent(toJson(event), ack))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("invalid order_cancelled event");
         verify(ack, never()).acknowledge();
     }
 
@@ -85,7 +107,7 @@ class ProductEventConsumerTest {
         }
     }
 
-    private OrderEvent createEvent(String eventType, int quantity) {
+    private OrderEvent createEvent(int quantity) {
         OrderItem item = new OrderItem();
         item.setProductId(UUID.randomUUID());
         item.setQuantity(quantity);
@@ -94,7 +116,7 @@ class ProductEventConsumerTest {
         event.setEventId(UUID.randomUUID());
         event.setOrderId(UUID.randomUUID());
         event.setCustomerId(UUID.randomUUID());
-        event.setEventType(eventType);
+        event.setEventType("order_cancelled");
         event.setTimestamp(Instant.now());
         event.setItems(List.of(item));
         return event;

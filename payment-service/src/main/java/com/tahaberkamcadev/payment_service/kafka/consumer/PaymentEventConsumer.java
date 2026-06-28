@@ -8,7 +8,7 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
 import com.tahaberkamcadev.payment_service.entity.Payment;
-import com.tahaberkamcadev.payment_service.kafka.event.inbound.InventoryEvent;
+import com.tahaberkamcadev.payment_service.kafka.event.inbound.OrderCreatedEvent;
 import com.tahaberkamcadev.payment_service.service.OutboxEventService;
 import com.tahaberkamcadev.payment_service.service.PaymentService;
 import com.tahaberkamcadev.payment_service.service.ProcessedEventService;
@@ -26,23 +26,23 @@ public class PaymentEventConsumer {
     private final OutboxEventService outboxEventService;
     private final ProcessedEventService processedEventService;
 
-    @KafkaListener(topics = "saga.inventory.stock_updated", groupId = "${spring.kafka.consumer.group-id}")
+    @KafkaListener(topics = "${app.kafka.topics.order-created}", groupId = "${spring.kafka.consumer.group-id}")
     @Transactional
-    public void consumeInventoryEvent(@Payload String payload, Acknowledgment ack) {
-        InventoryEvent event;
+    public void consumeOrderCreatedEvent(@Payload String payload, Acknowledgment ack) {
+        OrderCreatedEvent event;
         try {
-            event = new tools.jackson.databind.ObjectMapper().readValue(payload, InventoryEvent.class);
+            event = new tools.jackson.databind.ObjectMapper().readValue(payload, OrderCreatedEvent.class);
         } catch (Exception e) {
-            log.error("Failed to deserialize InventoryEvent: {}", payload, e);
+            log.error("Failed to deserialize OrderCreatedEvent: {}", payload, e);
             ack.acknowledge();
             return;
         }
 
-        if (event.getEventId() == null || event.getOrderId() == null || event.getAggregateType() == null) {
-            throw new IllegalArgumentException("Received invalid InventoryEvent: " + event);
+        if (event.getEventId() == null || event.getOrderId() == null || event.getTotalAmount() == null) {
+            throw new IllegalArgumentException("Received invalid OrderCreatedEvent: " + event);
         }
 
-        if (processedEventService.markIfNew(event.getEventId(), event.getEventType())) {
+        if (processedEventService.markIfNew(event.getEventId(), "order_created")) {
             Payment payment = Payment.builder()
                 .orderId(event.getOrderId())
                 .paymentMethod("Visa")
@@ -66,7 +66,7 @@ public class PaymentEventConsumer {
     }
 
     @KafkaListener(
-        topics = "${app.kafka.topics.stock-updated-dlt}",
+        topics = "${app.kafka.topics.order-created-dlt}",
         groupId = "${spring.kafka.consumer.group-id}-dlt"
     )
     public void handleDlt(

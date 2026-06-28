@@ -19,8 +19,8 @@ import com.tahaberkamcadev.inventory_service.InventoryServiceApplication;
             "spring.kafka.bootstrap-servers=127.0.0.1:19092",
             "spring.kafka.consumer.group-id=inventory-service",
             "spring.kafka.listener.auto-startup=false",
-            "app.kafka.topics.reserve-request=saga.inventory.reserve.request",
-            "app.kafka.topics.reserve-request-dlt=saga.inventory.reserve.request.DLT"
+            "app.kafka.topics.order-cancelled=saga.order.order_cancelled",
+            "app.kafka.topics.order-cancelled-dlt=saga.order.order_cancelled-dlt"
         })
 class InventoryServiceApplicationTests {
 

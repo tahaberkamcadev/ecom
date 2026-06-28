@@ -19,7 +19,6 @@ import com.tahaberkamcadev.inventory_service.dto.OrderPriceResponse;
 import com.tahaberkamcadev.inventory_service.dto.StockAdjustment;
 import com.tahaberkamcadev.inventory_service.entity.Product;
 import com.tahaberkamcadev.inventory_service.exception.InsufficientStockException;
-import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent.OrderItem;
 
 @Service
@@ -40,6 +39,7 @@ public class ProductService {
     }
 
     public OrderPriceResponse getOrderPrice(List<OrderItem> orderItems) {
+        validateOrderItems(orderItems);
         List<ItemPrice> itemPrices = new ArrayList<>();
         BigDecimal totalPrice = BigDecimal.ZERO;
         for (OrderItem orderItem : orderItems) {
@@ -55,6 +55,7 @@ public class ProductService {
 
     @Transactional
     public OrderPriceResponse reserveSync(UUID customerId, List<OrderItem> items) {
+        validateOrderItems(items);
         UUID orderId = UUID.randomUUID();
         for (OrderItem item : items) {
             int updated = productRepository.tryDecreaseStock(item.getProductId(), item.getQuantity());
@@ -166,6 +167,20 @@ public class ProductService {
                 .orElseThrow(() -> new IllegalArgumentException("No such product exists: " + productId));
         if (product.getStock() == 0) {
             outboxEventService.saveOutboxProductAvailabilityEvent(product, "product_out_of_stock");
+        }
+    }
+
+    private void validateOrderItems(List<OrderItem> items) {
+        if (items == null || items.isEmpty()) {
+            throw new IllegalArgumentException("Order items cannot be null or empty");
+        }
+        for (OrderItem item : items) {
+            if (item.getProductId() == null) {
+                throw new IllegalArgumentException("productId cannot be null");
+            }
+            if (item.getQuantity() <= 0) {
+                throw new IllegalArgumentException("quantity must be positive: " + item.getQuantity());
+            }
         }
     }
 }

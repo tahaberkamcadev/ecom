@@ -21,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.tahaberkamcadev.inventory_service.dto.ProductCategory;
 import com.tahaberkamcadev.inventory_service.dto.StockAdjustment;
 import com.tahaberkamcadev.inventory_service.entity.Product;
+import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent.OrderItem;
 import com.tahaberkamcadev.inventory_service.repository.ProductRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -187,5 +188,49 @@ class ProductServiceTest {
 
         verify(outboxEventService).saveOutboxProductEvent(product, "product_created");
         verify(outboxEventService, never()).saveOutboxProductAvailabilityEvent(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void reserveSync_shouldRejectNegativeQuantity() {
+        UUID productId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+        OrderItem item = new OrderItem();
+        item.setProductId(productId);
+        item.setQuantity(-1);
+
+        assertThatThrownBy(() -> productService.reserveSync(customerId, List.of(item)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("quantity must be positive");
+        verify(productRepository, never()).tryDecreaseStock(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt());
+        verify(outboxEventService, never()).saveOutboxReservedEvent(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void reserveSync_shouldRejectZeroQuantity() {
+        UUID productId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+        OrderItem item = new OrderItem();
+        item.setProductId(productId);
+        item.setQuantity(0);
+
+        assertThatThrownBy(() -> productService.reserveSync(customerId, List.of(item)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("quantity must be positive");
+        verify(productRepository, never()).tryDecreaseStock(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @Test
+    void getOrderPrice_shouldRejectNegativeQuantity() {
+        OrderItem item = new OrderItem();
+        item.setProductId(UUID.randomUUID());
+        item.setQuantity(-2);
+
+        assertThatThrownBy(() -> productService.getOrderPrice(List.of(item)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("quantity must be positive");
+        verify(productRepository, never()).findById(org.mockito.ArgumentMatchers.any());
     }
 }
