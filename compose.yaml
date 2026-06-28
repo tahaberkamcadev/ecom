@@ -307,6 +307,20 @@ services:
       timeout: 5s
       retries: 10
 
+  elasticsearch-projection:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.0.0
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+
   projection-service:
     build:
       context: ./projection-service
@@ -315,6 +329,8 @@ services:
       postgres-projection:
         condition: service_healthy
       redis-projection:
+        condition: service_healthy
+      elasticsearch-projection:
         condition: service_healthy
       kafka:
         condition: service_healthy
@@ -328,6 +344,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${PROJECTION_DB_PASSWORD}
       SPRING_DATA_REDIS_HOST: redis-projection
       SPRING_DATA_REDIS_PORT: 6379
+      SPRING_ELASTICSEARCH_URIS: http://elasticsearch-projection:9200
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_KAFKA_CONSUMER_GROUP_ID: projection-service
       SPRING_JPA_HIBERNATE_DDL_AUTO: update

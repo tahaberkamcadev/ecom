@@ -24,6 +24,12 @@ public class GlobalExceptionHandler {
                 .body(ApiErrorResponse.of("Forbidden", exception.getMessage()));
     }
 
+    @ExceptionHandler(SearchUnavailableException.class)
+    public ResponseEntity<ApiErrorResponse> handleSearchUnavailable(SearchUnavailableException exception) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiErrorResponse.of("Service Unavailable", exception.getMessage()));
+    }
+
     @ExceptionHandler({
             IllegalArgumentException.class,
             MethodArgumentTypeMismatchException.class

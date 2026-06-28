@@ -4,14 +4,17 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.tahaberkamcadev.projection_service.config.CacheNames;
+import com.tahaberkamcadev.projection_service.dto.response.ProductSearchPageResponse;
 import com.tahaberkamcadev.projection_service.entity.ProductReviewView;
 import com.tahaberkamcadev.projection_service.entity.ProductView;
 import com.tahaberkamcadev.projection_service.enums.ProductCategory;
+import com.tahaberkamcadev.projection_service.exception.SearchUnavailableException;
 import com.tahaberkamcadev.projection_service.repository.ProductReviewViewRepository;
 import com.tahaberkamcadev.projection_service.repository.ProductViewRepository;
 
@@ -24,6 +27,7 @@ public class ProductQueryService {
 
     private final ProductViewRepository productViewRepository;
     private final ProductReviewViewRepository productReviewViewRepository;
+    private final ObjectProvider<ProductSearchService> productSearchService;
 
     @Cacheable(
             cacheNames = CacheNames.PRODUCT_BY_ID,
@@ -47,5 +51,19 @@ public class ProductQueryService {
 
     public boolean productExists(UUID productId) {
         return productViewRepository.existsById(productId);
+    }
+
+    public ProductSearchPageResponse searchProducts(
+            String query,
+            ProductCategory category,
+            Boolean active,
+            int page,
+            int size
+    ) {
+        ProductSearchService searchService = productSearchService.getIfAvailable();
+        if (searchService == null) {
+            throw new SearchUnavailableException("Product search is not available");
+        }
+        return searchService.search(query, category, active, page, size);
     }
 }

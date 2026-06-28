@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.tahaberkamcadev.projection_service.dto.response.ProductDetailResponse;
+import com.tahaberkamcadev.projection_service.dto.response.ProductSearchPageResponse;
 import com.tahaberkamcadev.projection_service.dto.response.ProductSummaryResponse;
 import com.tahaberkamcadev.projection_service.dto.response.ReviewSnippetResponse;
 import com.tahaberkamcadev.projection_service.entity.ProductView;
@@ -38,6 +39,17 @@ public class ProductCatalogController {
                 .map(catalogMapper::toSummary)
                 .toList();
         return ResponseEntity.ok(products);
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<ProductSearchPageResponse> searchProducts(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) ProductCategory category,
+            @RequestParam(required = false) Boolean active,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return ResponseEntity.ok(productQueryService.searchProducts(q, category, active, page, size));
     }
 
     @GetMapping("/{productId}")

@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
@@ -37,6 +38,7 @@ public class ProductProjectionService {
 
     private final ProductViewRepository productViewRepository;
     private final ProductReviewViewRepository productReviewViewRepository;
+    private final ObjectProvider<ProductSearchService> productSearchService;
     private final ObjectMapper objectMapper;
 
     @Transactional
@@ -59,6 +61,7 @@ public class ProductProjectionService {
             productView.setActive(command.active());
             productView.setUpdatedAt(now);
             productViewRepository.save(productView);
+            indexProduct(productView);
             log.info("Product projection updated for product {}", command.productId());
             return;
         }
@@ -77,6 +80,7 @@ public class ProductProjectionService {
                 .build();
 
         productViewRepository.save(productView);
+        indexProduct(productView);
         log.info("Product projection created for product {}", command.productId());
     }
 
@@ -96,6 +100,7 @@ public class ProductProjectionService {
         productView.setInStock(inStock);
         productView.setUpdatedAt(Instant.now());
         productViewRepository.save(productView);
+        indexProduct(productView);
         log.info("Product projection {} stock availability updated to {}", productId, inStock);
     }
 
@@ -158,7 +163,12 @@ public class ProductProjectionService {
         ));
         productView.setUpdatedAt(Instant.now());
         productViewRepository.save(productView);
+        indexProduct(productView);
         log.info("Review projection added for product {} review {}", productId, reviewId);
+    }
+
+    private void indexProduct(ProductView productView) {
+        productSearchService.ifAvailable(service -> service.index(productView));
     }
 
     private String appendLatestReview(String currentJson, LatestReviewSnippet review) {

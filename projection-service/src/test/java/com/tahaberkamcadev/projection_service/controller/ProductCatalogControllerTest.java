@@ -19,6 +19,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.tahaberkamcadev.projection_service.dto.response.ProductDetailResponse;
+import com.tahaberkamcadev.projection_service.dto.response.ProductSearchPageResponse;
 import com.tahaberkamcadev.projection_service.dto.response.ProductSummaryResponse;
 import com.tahaberkamcadev.projection_service.entity.ProductView;
 import com.tahaberkamcadev.projection_service.enums.ProductCategory;
@@ -76,6 +77,36 @@ class ProductCatalogControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].name").value("Phone"))
                 .andExpect(jsonPath("$[0].category").value("ELECTRONICS"));
+    }
+
+    @Test
+    void searchProducts_returnsPagedResults() throws Exception {
+        UUID productId = UUID.randomUUID();
+        ProductSummaryResponse summary = new ProductSummaryResponse(
+                productId,
+                ProductCategory.ELECTRONICS,
+                "Wireless Earbuds",
+                "SoundMax",
+                new BigDecimal("1299.99"),
+                true,
+                new BigDecimal("4.50"),
+                3
+        );
+        ProductSearchPageResponse page = new ProductSearchPageResponse(List.of(summary), 1, 0, 20);
+
+        when(productQueryService.searchProducts("wireless", ProductCategory.ELECTRONICS, true, 0, 20))
+                .thenReturn(page);
+
+        mockMvc.perform(get("/api/catalog/products/search")
+                        .param("q", "wireless")
+                        .param("category", "ELECTRONICS")
+                        .param("active", "true")
+                        .param("page", "0")
+                        .param("size", "20")
+                        .header("X-Gateway-Secret", GATEWAY_SECRET))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.items[0].name").value("Wireless Earbuds"));
     }
 
     @Test
