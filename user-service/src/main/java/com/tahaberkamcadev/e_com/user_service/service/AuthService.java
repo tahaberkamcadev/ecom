@@ -28,7 +28,6 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
-    private final OutboxEventService outboxEventService;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -48,7 +47,6 @@ public class AuthService {
                 .build();
 
         User savedUser = userRepository.save(user);
-        outboxEventService.saveUserCreatedEvent(savedUser);
         log.info("New user registered with id: {}", savedUser.getId());
 
         Map<String, Object> claims = Map.of(

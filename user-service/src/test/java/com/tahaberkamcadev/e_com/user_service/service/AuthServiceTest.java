@@ -41,7 +41,6 @@ class AuthServiceTest {
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private JwtService jwtService;
     @Mock private AuthenticationManager authenticationManager;
-    @Mock private OutboxEventService outboxEventService;
 
     @InjectMocks
     private AuthService authService;
@@ -78,7 +77,6 @@ class AuthServiceTest {
         assertThat(response.accessToken()).isEqualTo("mock.jwt.token");
         assertThat(response.tokenType()).isEqualTo("Bearer");
         assertThat(response.expiresIn()).isEqualTo(86400000L);
-        verify(outboxEventService).saveUserCreatedEvent(savedUser);
     }
 
     @Test
@@ -110,7 +108,6 @@ class AuthServiceTest {
                 .isInstanceOf(EmailAlreadyExistsException.class);
 
         verify(userRepository, never()).save(any());
-        verify(outboxEventService, never()).saveUserCreatedEvent(any());
     }
 
     @Test

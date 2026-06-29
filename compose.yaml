@@ -1,30 +1,29 @@
 services:
   postgres-user:
-    image: postgres:17-alpine
-    command: ["postgres", "-c", "wal_level=logical"]
+    image: 'postgres:17-alpine'
     environment:
       POSTGRES_DB: ${USER_DB_NAME}
       POSTGRES_USER: ${USER_DB_USER}
       POSTGRES_PASSWORD: ${USER_DB_PASSWORD}
     ports:
-      - "5433:5432"
+      - '5433:5432'
     volumes:
       - user_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U myuser -d userservicedb"]
+      test: ['CMD-SHELL', 'pg_isready -U myuser -d userservicedb']
       interval: 5s
       timeout: 5s
       retries: 10
 
   postgres-inventory:
-    image: postgres:17-alpine
-    command: ["postgres", "-c", "wal_level=logical"]
+    image: 'postgres:17-alpine'
+    command: ['postgres', '-c', 'wal_level=logical']
     environment:
       POSTGRES_DB: ${INVENTORY_DB_NAME}
       POSTGRES_USER: ${INVENTORY_DB_USER}
       POSTGRES_PASSWORD: ${INVENTORY_DB_PASSWORD}
     ports:
-      - "5434:5432"
+      - '5434:5432'
     networks:
       default:
         aliases:
@@ -32,69 +31,67 @@ services:
     volumes:
       - inventory_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U inventory -d inventorydb"]
+      test: ['CMD-SHELL', 'pg_isready -U inventory -d inventorydb']
       interval: 5s
       timeout: 5s
       retries: 10
 
   postgres-order:
-    image: postgres:17-alpine
-    command: ["postgres", "-c", "wal_level=logical"]
+    image: 'postgres:17-alpine'
+    command: ['postgres', '-c', 'wal_level=logical']
     environment:
       POSTGRES_DB: ${ORDER_DB_NAME}
       POSTGRES_USER: ${ORDER_DB_USER}
       POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD}
     ports:
-      - "5435:5432"
+      - '5435:5432'
     volumes:
       - order_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U order -d orderdb"]
+      test: ['CMD-SHELL', 'pg_isready -U order -d orderdb']
       interval: 5s
       timeout: 5s
       retries: 10
 
   kafka:
-    image: confluentinc/cp-kafka:7.6.1
+    image: 'confluentinc/cp-kafka:7.6.1'
     ports:
-      - "9093:9093"
+      - '9093:9093'
     environment:
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9093,CONTROLLER://0.0.0.0:29093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9093
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9093,CONTROLLER://0.0.0.0:29093'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9093'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT'
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9093 --list > /dev/null 2>&1"]
+      test: ['CMD-SHELL', 'kafka-topics --bootstrap-server localhost:9093 --list > /dev/null 2>&1']
       interval: 10s
       timeout: 10s
       retries: 12
 
   kafka-ui:
-    image: provectuslabs/kafka-ui:latest
+    image: 'provectuslabs/kafka-ui:latest'
     depends_on:
       kafka:
         condition: service_healthy
     ports:
-      - "8090:8080"
+      - '8090:8080'
     environment:
       KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
-      DYNAMIC_CONFIG_ENABLED: "true"
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: 'kafka:29092'
+      DYNAMIC_CONFIG_ENABLED: 'true'
 
   connect:
-    image: debezium/connect:2.7.3.Final
+    image: 'debezium/connect:2.7.3.Final'
     depends_on:
       kafka:
-        condition: service_healthy
-      postgres-user:
         condition: service_healthy
       postgres-inventory:
         condition: service_healthy
@@ -103,9 +100,9 @@ services:
       postgres-review:
         condition: service_healthy
     ports:
-      - "8083:8083"
+      - '8083:8083'
     environment:
-      BOOTSTRAP_SERVERS: kafka:29092
+      BOOTSTRAP_SERVERS: 'kafka:29092'
       GROUP_ID: 1
       CONFIG_STORAGE_TOPIC: connect-configs
       OFFSET_STORAGE_TOPIC: connect-offsets
@@ -114,24 +111,22 @@ services:
       VALUE_CONVERTER: org.apache.kafka.connect.storage.StringConverter
       CONNECT_REST_ADVERTISED_HOST_NAME: connect
     healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:8083/connectors > /dev/null"]
+      test: ['CMD-SHELL', 'curl -s http://localhost:8083/connectors > /dev/null']
       interval: 10s
       timeout: 10s
       retries: 12
 
   connect-init:
-    image: curlimages/curl:8.12.1
+    image: 'curlimages/curl:8.12.1'
     depends_on:
       connect:
         condition: service_healthy
     volumes:
-      - ./infra/debezium:/debezium:ro
+      - './infra/debezium:/debezium:ro'
     command:
       - sh
       - -c
       - |
-        curl -s -X PUT http://connect:8083/connectors/user-outbox-connector/config \
-          -H "Content-Type: application/json" --data @/debezium/user-outbox-connector.json &&
         curl -s -X PUT http://connect:8083/connectors/inventory-outbox-connector/config \
           -H "Content-Type: application/json" --data @/debezium/inventory-outbox-connector.json &&
         curl -s -X PUT http://connect:8083/connectors/order-outbox-connector/config \
@@ -150,14 +145,14 @@ services:
       postgres-user:
         condition: service_healthy
     ports:
-      - "8081:8081"
+      - '8081:8081'
     environment:
       SERVER_PORT: 8081
-      DB_URL: jdbc:postgresql://postgres-user:5432/${USER_DB_NAME}
+      DB_URL: 'jdbc:postgresql://postgres-user:5432/${USER_DB_NAME}'
       DB_USERNAME: ${USER_DB_USER}
       DB_PASSWORD: ${USER_DB_PASSWORD}
-      KAFKA_ENABLED: "false"
-      EVENTS_ENABLED: "false"
+      KAFKA_ENABLED: 'false'
+      EVENTS_ENABLED: 'false'
       GATEWAY_SECRET: ${GATEWAY_SECRET}
       JWT_SECRET: ${JWT_SECRET}
 
@@ -173,13 +168,13 @@ services:
       connect-init:
         condition: service_completed_successfully
     ports:
-      - "8082:8082"
+      - '8082:8082'
     environment:
       SERVER_PORT: 8082
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-inventory:5432/${INVENTORY_DB_NAME}
+      SPRING_DATASOURCE_URL: 'jdbc:postgresql://postgres-inventory:5432/${INVENTORY_DB_NAME}'
       SPRING_DATASOURCE_USERNAME: ${INVENTORY_DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${INVENTORY_DB_PASSWORD}
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: 'kafka:29092'
       SPRING_KAFKA_CONSUMER_GROUP_ID: inventory-service
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       GATEWAY_SECRET: ${GATEWAY_SECRET}
@@ -194,31 +189,31 @@ services:
       kafka:
         condition: service_healthy
     ports:
-      - "8085:8083"
+      - '8085:8083'
     environment:
       SERVER_PORT: 8083
-      SPRING_DOCKER_COMPOSE_ENABLED: "false"
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-order:5432/${ORDER_DB_NAME}
+      SPRING_DOCKER_COMPOSE_ENABLED: 'false'
+      SPRING_DATASOURCE_URL: 'jdbc:postgresql://postgres-order:5432/${ORDER_DB_NAME}'
       SPRING_DATASOURCE_USERNAME: ${ORDER_DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${ORDER_DB_PASSWORD}
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: 'kafka:29092'
       SPRING_KAFKA_CONSUMER_GROUP_ID: order-service
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       GATEWAY_SECRET: ${GATEWAY_SECRET}
 
   postgres-payment:
-    image: postgres:17-alpine
-    command: ["postgres", "-c", "wal_level=logical"]
+    image: 'postgres:17-alpine'
+    command: ['postgres', '-c', 'wal_level=logical']
     environment:
       POSTGRES_DB: ${PAYMENT_DB_NAME}
       POSTGRES_USER: ${PAYMENT_DB_USER}
       POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD}
     ports:
-      - "5436:5432"
+      - '5436:5432'
     volumes:
       - payment_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U payment -d paymentdb"]
+      test: ['CMD-SHELL', 'pg_isready -U payment -d paymentdb']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -235,30 +230,30 @@ services:
       connect-init:
         condition: service_completed_successfully
     ports:
-      - "8084:8084"
+      - '8084:8084'
     environment:
       SERVER_PORT: 8084
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-payment:5432/${PAYMENT_DB_NAME}
+      SPRING_DATASOURCE_URL: 'jdbc:postgresql://postgres-payment:5432/${PAYMENT_DB_NAME}'
       SPRING_DATASOURCE_USERNAME: ${PAYMENT_DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${PAYMENT_DB_PASSWORD}
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: 'kafka:29092'
       SPRING_KAFKA_CONSUMER_GROUP_ID: payment-service
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       GATEWAY_SECRET: ${GATEWAY_SECRET}
 
   postgres-review:
-    image: postgres:17-alpine
-    command: ["postgres", "-c", "wal_level=logical"]
+    image: 'postgres:17-alpine'
+    command: ['postgres', '-c', 'wal_level=logical']
     environment:
       POSTGRES_DB: ${REVIEW_DB_NAME}
       POSTGRES_USER: ${REVIEW_DB_USER}
       POSTGRES_PASSWORD: ${REVIEW_DB_PASSWORD}
     ports:
-      - "5437:5432"
+      - '5437:5432'
     volumes:
       - review_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U review -d reviewdb"]
+      test: ['CMD-SHELL', 'pg_isready -U review -d reviewdb']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -273,51 +268,51 @@ services:
       connect-init:
         condition: service_completed_successfully
     ports:
-      - "8086:8086"
+      - '8086:8086'
     environment:
       SERVER_PORT: 8086
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-review:5432/${REVIEW_DB_NAME}
+      SPRING_DATASOURCE_URL: 'jdbc:postgresql://postgres-review:5432/${REVIEW_DB_NAME}'
       SPRING_DATASOURCE_USERNAME: ${REVIEW_DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${REVIEW_DB_PASSWORD}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       GATEWAY_SECRET: ${GATEWAY_SECRET}
 
   postgres-projection:
-    image: postgres:17-alpine
+    image: 'postgres:17-alpine'
     environment:
       POSTGRES_DB: ${PROJECTION_DB_NAME}
       POSTGRES_USER: ${PROJECTION_DB_USER}
       POSTGRES_PASSWORD: ${PROJECTION_DB_PASSWORD}
     ports:
-      - "5438:5432"
+      - '5438:5432'
     volumes:
       - projection_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U projection -d projectiondb"]
+      test: ['CMD-SHELL', 'pg_isready -U projection -d projectiondb']
       interval: 5s
       timeout: 5s
       retries: 10
 
   redis-projection:
-    image: redis:7-alpine
+    image: 'redis:7-alpine'
     ports:
-      - "6379:6379"
+      - '6379:6379'
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 5s
       retries: 10
 
   elasticsearch-projection:
-    image: docker.elastic.co/elasticsearch/elasticsearch:9.0.0
+    image: 'docker.elastic.co/elasticsearch/elasticsearch:9.0.0'
     environment:
       discovery.type: single-node
-      xpack.security.enabled: "false"
-      ES_JAVA_OPTS: -Xms512m -Xmx512m
+      xpack.security.enabled: 'false'
+      ES_JAVA_OPTS: '-Xms512m -Xmx512m'
     ports:
-      - "9200:9200"
+      - '9200:9200'
     healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'"]
+      test: ['CMD-SHELL', 'curl -s http://localhost:9200/_cluster/health | grep -q ''"status":"green"\|"status":"yellow"''']
       interval: 10s
       timeout: 10s
       retries: 12
@@ -336,17 +331,17 @@ services:
       kafka:
         condition: service_healthy
     ports:
-      - "8087:8087"
+      - '8087:8087'
     environment:
       SERVER_PORT: 8087
-      SPRING_DOCKER_COMPOSE_ENABLED: "false"
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-projection:5432/${PROJECTION_DB_NAME}
+      SPRING_DOCKER_COMPOSE_ENABLED: 'false'
+      SPRING_DATASOURCE_URL: 'jdbc:postgresql://postgres-projection:5432/${PROJECTION_DB_NAME}'
       SPRING_DATASOURCE_USERNAME: ${PROJECTION_DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${PROJECTION_DB_PASSWORD}
       SPRING_DATA_REDIS_HOST: redis-projection
       SPRING_DATA_REDIS_PORT: 6379
-      SPRING_ELASTICSEARCH_URIS: http://elasticsearch-projection:9200
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_ELASTICSEARCH_URIS: 'http://elasticsearch-projection:9200'
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: 'kafka:29092'
       SPRING_KAFKA_CONSUMER_GROUP_ID: projection-service
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       GATEWAY_SECRET: ${GATEWAY_SECRET}
@@ -369,15 +364,15 @@ services:
       projection-service:
         condition: service_started
     ports:
-      - "8080:8080"
+      - '8080:8080'
     environment:
       SERVER_PORT: 8080
-      USER_SERVICE_URL: http://user-service:8081
-      INVENTORY_SERVICE_URL: http://inventory-service:8082
-      ORDER_SERVICE_URL: http://order-service:8083
-      PAYMENT_SERVICE_URL: http://payment-service:8084
-      REVIEW_SERVICE_URL: http://review-service:8086
-      PROJECTION_SERVICE_URL: http://projection-service:8087
+      USER_SERVICE_URL: 'http://user-service:8081'
+      INVENTORY_SERVICE_URL: 'http://inventory-service:8082'
+      ORDER_SERVICE_URL: 'http://order-service:8083'
+      PAYMENT_SERVICE_URL: 'http://payment-service:8084'
+      REVIEW_SERVICE_URL: 'http://review-service:8086'
+      PROJECTION_SERVICE_URL: 'http://projection-service:8087'
       JWT_SECRET: ${JWT_SECRET}
       GATEWAY_SECRET: ${GATEWAY_SECRET}
 

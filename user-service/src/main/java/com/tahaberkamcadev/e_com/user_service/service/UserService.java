@@ -27,7 +27,6 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final OutboxEventService outboxEventService;
 
     @Transactional(readOnly = true)
     public List<UserResponse> getAllUsers() {
@@ -118,11 +117,7 @@ public class UserService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new UserNotFoundException(id));
 
-        UUID userId = user.getId();
-        String email = user.getEmail();
-
         userRepository.delete(user);
-        outboxEventService.saveUserDeletedEvent(userId, email);
         log.info("User deleted with id: {}", id);
     }
 

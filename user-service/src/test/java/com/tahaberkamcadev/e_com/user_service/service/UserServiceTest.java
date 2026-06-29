@@ -35,7 +35,6 @@ class UserServiceTest {
 
     @Mock private UserRepository userRepository;
     @Mock private PasswordEncoder passwordEncoder;
-    @Mock private OutboxEventService outboxEventService;
 
     @InjectMocks
     private UserService userService;
@@ -239,7 +238,6 @@ class UserServiceTest {
         userService.deleteUser(customerUser.getId());
 
         verify(userRepository).delete(customerUser);
-        verify(outboxEventService).saveUserDeletedEvent(customerUser.getId(), customerUser.getEmail());
     }
 
     @Test
