@@ -1,6 +1,7 @@
 services:
   postgres-user:
     image: 'postgres:17-alpine'
+    command: ['postgres', '-c', 'wal_level=logical']
     environment:
       POSTGRES_DB: ${USER_DB_NAME}
       POSTGRES_USER: ${USER_DB_USER}
@@ -188,8 +189,6 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
-    ports:
-      - '8085:8083'
     environment:
       SERVER_PORT: 8083
       SPRING_DOCKER_COMPOSE_ENABLED: 'false'
@@ -229,8 +228,6 @@ services:
         condition: service_healthy
       connect-init:
         condition: service_completed_successfully
-    ports:
-      - '8084:8084'
     environment:
       SERVER_PORT: 8084
       SPRING_DATASOURCE_URL: 'jdbc:postgresql://postgres-payment:5432/${PAYMENT_DB_NAME}'
@@ -355,10 +352,6 @@ services:
         condition: service_started
       inventory-service:
         condition: service_started
-      order-service:
-        condition: service_started
-      payment-service:
-        condition: service_started
       review-service:
         condition: service_started
       projection-service:
@@ -369,8 +362,6 @@ services:
       SERVER_PORT: 8080
       USER_SERVICE_URL: 'http://user-service:8081'
       INVENTORY_SERVICE_URL: 'http://inventory-service:8082'
-      ORDER_SERVICE_URL: 'http://order-service:8083'
-      PAYMENT_SERVICE_URL: 'http://payment-service:8084'
       REVIEW_SERVICE_URL: 'http://review-service:8086'
       PROJECTION_SERVICE_URL: 'http://projection-service:8087'
       JWT_SECRET: ${JWT_SECRET}
