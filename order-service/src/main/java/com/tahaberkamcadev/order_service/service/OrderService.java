@@ -8,7 +8,6 @@ import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
 import com.tahaberkamcadev.order_service.dto.OrderItem;
-import com.tahaberkamcadev.order_service.dto.OrderResponse;
 import com.tahaberkamcadev.order_service.dto.OrderStatus;
 import com.tahaberkamcadev.order_service.entity.Order;
 import com.tahaberkamcadev.order_service.exception.OrderNotFoundException;
@@ -64,12 +63,5 @@ public class OrderService {
         return mapper.readValue(order.getOrderItems(), new TypeReference<List<OrderItem>>() {});
     }
 
-    public OrderResponse getOrder(UUID orderId, UUID userId) {
-        Order order = orderRepository.findById(orderId)
-                .filter(existing -> existing.getUserId().equals(userId))
-                .orElseThrow(() -> new OrderNotFoundException("Order not found: " + orderId));
-        ObjectMapper mapper = new ObjectMapper();
-        List<OrderItem> items = mapper.readValue(order.getOrderItems(), new TypeReference<List<OrderItem>>() {});
-        return new OrderResponse(order.getId(), order.getStatus(), items, order.getCreatedAt());
-    }
+    
 }
