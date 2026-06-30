@@ -37,6 +37,38 @@ class ProductServiceTest {
     private ProductService productService;
 
     @Test
+    void deleteProduct_shouldPublishOutboxBeforeDelete() {
+        UUID productId = UUID.randomUUID();
+        Product product = Product.builder()
+                .id(productId)
+                .category(ProductCategory.ELECTRONICS)
+                .name("Phone")
+                .brand("BrandX")
+                .price(BigDecimal.TEN)
+                .stock(5)
+                .active(true)
+                .build();
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+
+        productService.deleteProduct(productId);
+
+        verify(outboxEventService).saveOutboxProductDeletedEvent(product);
+        verify(productRepository).deleteById(productId);
+    }
+
+    @Test
+    void deleteProduct_shouldThrowWhenProductMissing() {
+        UUID productId = UUID.randomUUID();
+        when(productRepository.findById(productId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> productService.deleteProduct(productId))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("No such product exists");
+        verify(outboxEventService, never()).saveOutboxProductDeletedEvent(org.mockito.ArgumentMatchers.any());
+        verify(productRepository, never()).deleteById(productId);
+    }
+
+    @Test
     void decreaseStock_shouldNotPublishAvailabilityEventWhenStockRemainsPositive() {
         UUID productId = UUID.randomUUID();
         Product product = Product.builder()

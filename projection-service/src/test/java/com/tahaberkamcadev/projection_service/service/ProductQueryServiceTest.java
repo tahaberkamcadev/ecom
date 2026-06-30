@@ -12,12 +12,24 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
+import com.tahaberkamcadev.projection_service.dto.cache.ProductViewCacheDto;
 import com.tahaberkamcadev.projection_service.dto.response.ProductSearchPageResponse;
+import com.tahaberkamcadev.projection_service.entity.ProductReviewView;
+import com.tahaberkamcadev.projection_service.entity.ProductView;
 import com.tahaberkamcadev.projection_service.enums.ProductCategory;
 import com.tahaberkamcadev.projection_service.exception.SearchUnavailableException;
 import com.tahaberkamcadev.projection_service.repository.ProductReviewViewRepository;
 import com.tahaberkamcadev.projection_service.repository.ProductViewRepository;
+import com.tahaberkamcadev.projection_service.service.ProductQueryService.ReviewPageQueryResult;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.Optional;
+import java.util.UUID;
 
 @ExtendWith(MockitoExtension.class)
 class ProductQueryServiceTest {
@@ -29,6 +41,9 @@ class ProductQueryServiceTest {
     private ProductReviewViewRepository productReviewViewRepository;
 
     @Mock
+    private ProductViewCacheService productViewCacheService;
+
+    @Mock
     private ObjectProvider<ProductSearchService> productSearchService;
 
     @Mock
@@ -36,6 +51,36 @@ class ProductQueryServiceTest {
 
     @InjectMocks
     private ProductQueryService productQueryService;
+
+    @Test
+    void findProductById_shouldMapCachedDtoToEntity() {
+        UUID productId = UUID.randomUUID();
+        ProductViewCacheDto dto = new ProductViewCacheDto(
+                productId,
+                ProductCategory.BOOKS,
+                "Clean Code",
+                "Prentice Hall",
+                "Craftsmanship",
+                new BigDecimal("39.99"),
+                true,
+                true,
+                0,
+                0,
+                BigDecimal.ZERO,
+                "[]",
+                Instant.now(),
+                Instant.now()
+        );
+
+        when(productViewCacheService.findById(productId)).thenReturn(Optional.of(dto));
+
+        Optional<ProductView> result = productQueryService.findProductById(productId);
+
+        assertThat(result).hasValueSatisfying(product -> {
+            assertThat(product.getProductId()).isEqualTo(productId);
+            assertThat(product.getName()).isEqualTo("Clean Code");
+        });
+    }
 
     @Test
     void searchProducts_shouldDelegateToSearchService() {
@@ -52,6 +97,35 @@ class ProductQueryServiceTest {
         );
 
         assertThat(result).isSameAs(page);
+    }
+
+    @Test
+    void findReviewsByProductId_shouldReturnPagedReviews() {
+        UUID productId = UUID.randomUUID();
+        ProductReviewView review = ProductReviewView.builder()
+                .reviewId(UUID.randomUUID())
+                .productId(productId)
+                .userId(UUID.randomUUID())
+                .rating(4)
+                .comment("Good")
+                .createdAt(Instant.now())
+                .build();
+        Page<ProductReviewView> page = new PageImpl<>(List.of(review), PageRequest.of(0, 20), 1);
+
+        when(productReviewViewRepository.findByProductIdOrderByCreatedAtDesc(productId, PageRequest.of(0, 20)))
+                .thenReturn(page);
+
+        ReviewPageQueryResult result = productQueryService.findReviewsByProductId(productId, 0, 20);
+
+        assertThat(result.total()).isEqualTo(1);
+        assertThat(result.reviews()).containsExactly(review);
+    }
+
+    @Test
+    void findReviewsByProductId_shouldRejectInvalidPageSize() {
+        assertThatThrownBy(() -> productQueryService.findReviewsByProductId(UUID.randomUUID(), 0, 101))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("size must be between 1 and 100");
     }
 
     @Test

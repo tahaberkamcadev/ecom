@@ -5,11 +5,11 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.tahaberkamcadev.projection_service.config.CacheNames;
 import com.tahaberkamcadev.projection_service.dto.response.ProductSearchPageResponse;
 import com.tahaberkamcadev.projection_service.entity.ProductReviewView;
 import com.tahaberkamcadev.projection_service.entity.ProductView;
@@ -25,29 +25,44 @@ import lombok.RequiredArgsConstructor;
 @Transactional(readOnly = true)
 public class ProductQueryService {
 
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final ProductViewRepository productViewRepository;
     private final ProductReviewViewRepository productReviewViewRepository;
+    private final ProductViewCacheService productViewCacheService;
     private final ObjectProvider<ProductSearchService> productSearchService;
 
-    @Cacheable(
-            cacheNames = CacheNames.PRODUCT_BY_ID,
-            key = "#productId"
-    )
     public Optional<ProductView> findProductById(UUID productId) {
-        return productViewRepository.findById(productId)
-                .filter(ProductView::isActive);
+        return productViewCacheService.findById(productId)
+                .map(dto -> dto.toEntity());
     }
 
-    @Cacheable(
-            cacheNames = CacheNames.PRODUCTS_BY_CATEGORY,
-            key = "#category.name() + ':' + #active"
-    )
     public List<ProductView> findByCategoryAndActive(ProductCategory category, boolean active) {
         return productViewRepository.findByCategoryAndActiveOrderByNameAsc(category, active);
     }
 
-    public List<ProductReviewView> findReviewsByProductId(UUID productId) {
-        return productReviewViewRepository.findByProductIdOrderByCreatedAtDesc(productId);
+    public ReviewPageQueryResult findReviewsByProductId(UUID productId, int page, int size) {
+        if (productId == null) {
+            throw new IllegalArgumentException("productId must not be null");
+        }
+        if (page < 0) {
+            throw new IllegalArgumentException("page must be >= 0");
+        }
+        if (size < 1 || size > MAX_PAGE_SIZE) {
+            throw new IllegalArgumentException("size must be between 1 and " + MAX_PAGE_SIZE);
+        }
+
+        Page<ProductReviewView> reviewPage = productReviewViewRepository.findByProductIdOrderByCreatedAtDesc(
+                productId,
+                PageRequest.of(page, size)
+        );
+
+        return new ReviewPageQueryResult(
+                reviewPage.getContent(),
+                reviewPage.getTotalElements(),
+                page,
+                size
+        );
     }
 
     public boolean productExists(UUID productId) {
@@ -66,5 +81,8 @@ public class ProductQueryService {
             throw new SearchUnavailableException("Product search is not available");
         }
         return searchService.search(query, category, active, page, size);
+    }
+
+    public record ReviewPageQueryResult(List<ProductReviewView> reviews, long total, int page, int size) {
     }
 }

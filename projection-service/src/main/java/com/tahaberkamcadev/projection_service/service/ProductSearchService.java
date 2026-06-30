@@ -34,6 +34,10 @@ public class ProductSearchService {
         productSearchRepository.save(toDocument(productView));
     }
 
+    public void remove(UUID productId) {
+        productSearchRepository.deleteById(productId.toString());
+    }
+
     public ProductSearchPageResponse search(
             String query,
             ProductCategory category,

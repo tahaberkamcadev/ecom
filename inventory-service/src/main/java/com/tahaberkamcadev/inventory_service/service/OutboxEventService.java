@@ -63,6 +63,17 @@ public class OutboxEventService {
     }
 
     @Transactional
+    public void saveOutboxProductDeletedEvent(Product product) {
+        Map<String, Object> payloadData = new HashMap<>();
+        payloadData.put("eventId", UUID.randomUUID());
+        payloadData.put("eventType", "product_deleted");
+        payloadData.put("aggregateType", "Product");
+        payloadData.put("productId", product.getId());
+        persistOutboxEvent("Product", "product_deleted", payloadData);
+        log.info("Product deleted outbox event saved for product {}", product.getId());
+    }
+
+    @Transactional
     public void saveOutboxProductAvailabilityEvent(Product product, String eventType) {
         Map<String, Object> payloadData = new HashMap<>();
         payloadData.put("eventId", UUID.randomUUID());

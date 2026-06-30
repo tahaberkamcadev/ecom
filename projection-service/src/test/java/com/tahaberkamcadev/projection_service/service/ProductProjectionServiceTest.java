@@ -124,4 +124,32 @@ class ProductProjectionServiceTest {
         verify(productSearchServiceInstance).index(productView);
         verify(productViewRepository).save(productView);
     }
+
+    @Test
+    void deleteProduct_shouldDeactivateAndRemoveFromSearchIndex() {
+        UUID productId = UUID.randomUUID();
+        ProductView productView = ProductView.builder()
+                .productId(productId)
+                .category(ProductCategory.BOOKS)
+                .name("Old Book")
+                .brand("Publisher")
+                .price(new BigDecimal("19.99"))
+                .inStock(true)
+                .active(true)
+                .updatedAt(Instant.now())
+                .build();
+
+        when(productViewRepository.findById(productId)).thenReturn(Optional.of(productView));
+        when(productViewRepository.save(productView)).thenReturn(productView);
+        doAnswer(invocation -> {
+            Consumer<ProductSearchService> consumer = invocation.getArgument(0);
+            consumer.accept(productSearchServiceInstance);
+            return null;
+        }).when(productSearchService).ifAvailable(any());
+
+        productProjectionService.deleteProduct(productId);
+
+        verify(productViewRepository).save(productView);
+        verify(productSearchServiceInstance).remove(productId);
+    }
 }

@@ -21,10 +21,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.tahaberkamcadev.projection_service.dto.response.ProductDetailResponse;
 import com.tahaberkamcadev.projection_service.dto.response.ProductSearchPageResponse;
 import com.tahaberkamcadev.projection_service.dto.response.ProductSummaryResponse;
+import com.tahaberkamcadev.projection_service.dto.response.ReviewSnippetResponse;
+import com.tahaberkamcadev.projection_service.entity.ProductReviewView;
 import com.tahaberkamcadev.projection_service.entity.ProductView;
 import com.tahaberkamcadev.projection_service.enums.ProductCategory;
 import com.tahaberkamcadev.projection_service.mapper.CatalogMapper;
 import com.tahaberkamcadev.projection_service.service.ProductQueryService;
+import com.tahaberkamcadev.projection_service.service.ProductQueryService.ReviewPageQueryResult;
 
 @WebMvcTest(controllers = ProductCatalogController.class)
 class ProductCatalogControllerTest {
@@ -162,5 +165,43 @@ class ProductCatalogControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Clean Code"))
                 .andExpect(jsonPath("$.reviewCount").value(10));
+    }
+
+    @Test
+    void getProductReviews_returnsPagedReviews() throws Exception {
+        UUID productId = UUID.randomUUID();
+        UUID reviewId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Instant createdAt = Instant.parse("2026-06-27T18:00:00Z");
+
+        ProductReviewView reviewView = ProductReviewView.builder()
+                .reviewId(reviewId)
+                .productId(productId)
+                .userId(userId)
+                .rating(5)
+                .comment("Excellent")
+                .createdAt(createdAt)
+                .build();
+
+        ReviewSnippetResponse snippet = new ReviewSnippetResponse(
+                reviewId,
+                userId,
+                5,
+                "Excellent",
+                createdAt
+        );
+
+        when(productQueryService.productExists(productId)).thenReturn(true);
+        when(productQueryService.findReviewsByProductId(productId, 0, 20))
+                .thenReturn(new ReviewPageQueryResult(List.of(reviewView), 1, 0, 20));
+        when(catalogMapper.toReviewSnippet(reviewView)).thenReturn(snippet);
+
+        mockMvc.perform(get("/api/catalog/products/{productId}/reviews", productId)
+                        .param("page", "0")
+                        .param("size", "20")
+                        .header("X-Gateway-Secret", GATEWAY_SECRET))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.items[0].comment").value("Excellent"));
     }
 }

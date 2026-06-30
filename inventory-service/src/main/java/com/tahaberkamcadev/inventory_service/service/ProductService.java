@@ -73,7 +73,11 @@ public class ProductService {
                 .build();
     }
 
+    @Transactional
     public void deleteProduct(UUID id) {
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("No such product exists: " + id));
+        outboxEventService.saveOutboxProductDeletedEvent(product);
         productRepository.deleteById(id);
         log.info("Product deleted: {}", id);
     }

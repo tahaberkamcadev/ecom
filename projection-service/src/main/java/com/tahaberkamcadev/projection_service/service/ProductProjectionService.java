@@ -10,7 +10,6 @@ import java.util.UUID;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,10 +41,7 @@ public class ProductProjectionService {
     private final ObjectMapper objectMapper;
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(cacheNames = CacheNames.PRODUCT_BY_ID, key = "#command.productId()"),
-            @CacheEvict(cacheNames = CacheNames.PRODUCTS_BY_CATEGORY, allEntries = true)
-    })
+    @CacheEvict(cacheNames = CacheNames.PRODUCT_BY_ID, key = "#command.productId()")
     public void upsertProduct(ProductCommand command) {
         Instant now = Instant.now();
         Optional<ProductView> existing = productViewRepository.findById(command.productId());
@@ -85,10 +81,7 @@ public class ProductProjectionService {
     }
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(cacheNames = CacheNames.PRODUCT_BY_ID, key = "#productId"),
-            @CacheEvict(cacheNames = CacheNames.PRODUCTS_BY_CATEGORY, allEntries = true)
-    })
+    @CacheEvict(cacheNames = CacheNames.PRODUCT_BY_ID, key = "#productId")
     public void updateStockAvailability(UUID productId, boolean inStock) {
         if (productId == null) {
             throw new IllegalArgumentException("productId must not be null");
@@ -105,10 +98,7 @@ public class ProductProjectionService {
     }
 
     @Transactional
-    @Caching(evict = {
-            @CacheEvict(cacheNames = CacheNames.PRODUCT_BY_ID, key = "#productId"),
-            @CacheEvict(cacheNames = CacheNames.PRODUCTS_BY_CATEGORY, allEntries = true)
-    })
+    @CacheEvict(cacheNames = CacheNames.PRODUCT_BY_ID, key = "#productId")
     public void addReview(
             UUID reviewId,
             UUID productId,
@@ -167,8 +157,34 @@ public class ProductProjectionService {
         log.info("Review projection added for product {} review {}", productId, reviewId);
     }
 
+    @Transactional
+    @CacheEvict(cacheNames = CacheNames.PRODUCT_BY_ID, key = "#productId")
+    public void deleteProduct(UUID productId) {
+        if (productId == null) {
+            throw new IllegalArgumentException("productId must not be null");
+        }
+
+        ProductView productView = productViewRepository.findById(productId).orElse(null);
+        if (productView == null) {
+            log.warn("Product view not found for deletion, skipping: {}", productId);
+            removeFromSearchIndex(productId);
+            return;
+        }
+
+        productView.setActive(false);
+        productView.setInStock(false);
+        productView.setUpdatedAt(Instant.now());
+        productViewRepository.save(productView);
+        removeFromSearchIndex(productId);
+        log.info("Product projection deactivated for product {}", productId);
+    }
+
     private void indexProduct(ProductView productView) {
         productSearchService.ifAvailable(service -> service.index(productView));
+    }
+
+    private void removeFromSearchIndex(UUID productId) {
+        productSearchService.ifAvailable(service -> service.remove(productId));
     }
 
     private String appendLatestReview(String currentJson, LatestReviewSnippet review) {

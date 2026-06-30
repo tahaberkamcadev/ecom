@@ -132,6 +132,18 @@ class ProjectionEventConsumerTest {
     }
 
     @Test
+    void consumeProductDeletedEvent_shouldDeleteProductProjection() {
+        ProductEvent event = createProductEvent();
+        event.setEventType("product_deleted");
+        when(processedEventService.markIfNew(event.getEventId(), "product_deleted")).thenReturn(true);
+
+        consumer.consumeProductDeletedEvent(toJson(event), ack);
+
+        verify(productProjectionService).deleteProduct(event.getProductId());
+        verify(ack).acknowledge();
+    }
+
+    @Test
     void consumeProductInStockEvent_shouldUpdateAvailability() {
         ProductEvent event = createAvailabilityEvent(true);
         when(processedEventService.markIfNew(event.getEventId(), "product_in_stock")).thenReturn(true);

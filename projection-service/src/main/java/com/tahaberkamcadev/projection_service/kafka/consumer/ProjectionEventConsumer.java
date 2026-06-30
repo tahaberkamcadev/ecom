@@ -48,6 +48,31 @@ public class ProjectionEventConsumer {
         consumeProductUpsertEvent(payload, ack, "product_updated");
     }
 
+    @KafkaListener(topics = "saga.inventory.product_deleted", groupId = "${spring.kafka.consumer.group-id}")
+    @Transactional
+    public void consumeProductDeletedEvent(@Payload String payload, Acknowledgment ack) {
+        ProductEvent event;
+        try {
+            event = new ObjectMapper().readValue(payload, ProductEvent.class);
+        } catch (Exception e) {
+            log.error("Failed to deserialize ProductEvent: {}", payload, e);
+            ack.acknowledge();
+            return;
+        }
+
+        if (event.getEventId() == null || event.getProductId() == null) {
+            throw new IllegalArgumentException("Received invalid ProductEvent: " + event);
+        }
+
+        if (processedEventService.markIfNew(event.getEventId(), "product_deleted")) {
+            productProjectionService.deleteProduct(event.getProductId());
+            log.info("Product projection deleted for product {}", event.getProductId());
+        } else {
+            log.info("Duplicate product_deleted event received, ignoring. Event ID: {}", event.getEventId());
+        }
+        ack.acknowledge();
+    }
+
     @KafkaListener(topics = "saga.inventory.product_in_stock", groupId = "${spring.kafka.consumer.group-id}")
     @Transactional
     public void consumeProductInStockEvent(@Payload String payload, Acknowledgment ack) {
@@ -190,6 +215,7 @@ public class ProjectionEventConsumer {
             "${app.kafka.topics.payment-completed-dlt}",
             "${app.kafka.topics.product-created-dlt}",
             "${app.kafka.topics.product-updated-dlt}",
+            "${app.kafka.topics.product-deleted-dlt}",
             "${app.kafka.topics.product-in-stock-dlt}",
             "${app.kafka.topics.product-out-of-stock-dlt}",
             "${app.kafka.topics.review-created-dlt}"
