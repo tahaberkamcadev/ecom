@@ -14,6 +14,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.tahaberkamcadev.projection_service.dto.cache.ProductViewCacheDto;
 import com.tahaberkamcadev.projection_service.entity.ProductView;
 import com.tahaberkamcadev.projection_service.enums.ProductCategory;
 import com.tahaberkamcadev.projection_service.repository.ProductViewRepository;
@@ -45,11 +46,10 @@ class ProductViewCacheServiceTest {
 
         when(productViewRepository.findById(productId)).thenReturn(Optional.of(productView));
 
-        assertThat(productViewCacheService.findById(productId))
-                .hasValueSatisfying(dto -> {
-                    assertThat(dto.productId()).isEqualTo(productId);
-                    assertThat(dto.name()).isEqualTo("Phone");
-                });
+        ProductViewCacheDto dto = productViewCacheService.findById(productId);
+        assertThat(dto).isNotNull();
+        assertThat(dto.productId()).isEqualTo(productId);
+        assertThat(dto.name()).isEqualTo("Phone");
     }
 
     @Test
@@ -68,7 +68,7 @@ class ProductViewCacheServiceTest {
 
         when(productViewRepository.findById(productId)).thenReturn(Optional.of(productView));
 
-        assertThat(productViewCacheService.findById(productId)).isEmpty();
+        assertThat(productViewCacheService.findById(productId)).isNull();
     }
 
     @Test
@@ -76,6 +76,6 @@ class ProductViewCacheServiceTest {
         UUID productId = UUID.randomUUID();
         when(productViewRepository.findById(productId)).thenReturn(Optional.empty());
 
-        assertThat(productViewCacheService.findById(productId)).isEmpty();
+        assertThat(productViewCacheService.findById(productId)).isNull();
     }
 }

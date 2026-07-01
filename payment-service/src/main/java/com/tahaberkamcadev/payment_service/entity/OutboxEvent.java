@@ -2,6 +2,7 @@ package com.tahaberkamcadev.payment_service.entity;
 
 import java.time.Instant;
 import java.util.UUID;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -22,31 +23,30 @@ import lombok.Setter;
 @Builder
 public class OutboxEvent {
 
-    @Column(name = "event_id", nullable = false, updatable = false)
     @Id
-    private UUID eventId;
+    @Column(name = "id", nullable = false, updatable = false)
+    private UUID id;
 
-    @Column(name = "order_id", nullable = false)
-    private UUID orderId;
+    @Column(name = "aggregatetype", nullable = false)
+    private String aggregateType;
 
-    @Column(name = "customer_id")
-    private UUID customerId;
+    @Column(name = "aggregateid", nullable = false)
+    private String aggregateId;
 
-    @Column(name = "event_type")
-    private String eventType;
+    @Column(name = "type", nullable = false)
+    private String type;
 
     @Column(name = "payload", columnDefinition = "text")
     private String payload;
 
-    @Column(name = "timestamp")
+    @Column(name = "timestamp", nullable = false)
     @Builder.Default
     private Instant timestamp = Instant.now();
 
     @PrePersist
     private void prePersist() {
-        if (eventId == null) {
-            eventId = UUID.randomUUID();
+        if (id == null) {
+            id = UUID.randomUUID();
         }
     }
-
 }

@@ -23,22 +23,25 @@ import lombok.Setter;
 @Builder
 public class OutboxEvent {
 
-    @Column(nullable = false, updatable = false)
     @Id
+    @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
-    @Column(nullable = false)
+    @Column(name = "aggregatetype", nullable = false)
     private String aggregateType;
 
-    @Column(columnDefinition = "text")
+    @Column(name = "aggregateid", nullable = false)
+    private String aggregateId;
+
+    @Column(name = "type", nullable = false)
+    private String type;
+
+    @Column(name = "payload", columnDefinition = "text")
     private String payload;
 
-    @Column(nullable = false)
-    private String eventType;
-
-    @Column(nullable = false)
+    @Column(name = "timestamp", nullable = false)
     @Builder.Default
-    private Instant createdAt = Instant.now();
+    private Instant timestamp = Instant.now();
 
     @PrePersist
     private void prePersist() {

@@ -10,6 +10,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.tahaberkamcadev.projection_service.dto.cache.ProductViewCacheDto;
 import com.tahaberkamcadev.projection_service.dto.response.ProductSearchPageResponse;
 import com.tahaberkamcadev.projection_service.entity.ProductReviewView;
 import com.tahaberkamcadev.projection_service.entity.ProductView;
@@ -33,8 +34,8 @@ public class ProductQueryService {
     private final ObjectProvider<ProductSearchService> productSearchService;
 
     public Optional<ProductView> findProductById(UUID productId) {
-        return productViewCacheService.findById(productId)
-                .map(dto -> dto.toEntity());
+        return Optional.ofNullable(productViewCacheService.findById(productId))
+                .map(ProductViewCacheDto::toEntity);
     }
 
     public List<ProductView> findByCategoryAndActive(ProductCategory category, boolean active) {
@@ -76,6 +77,13 @@ public class ProductQueryService {
             int page,
             int size
     ) {
+        if (page < 0) {
+            throw new IllegalArgumentException("page must be >= 0");
+        }
+        if (size < 1 || size > MAX_PAGE_SIZE) {
+            throw new IllegalArgumentException("size must be between 1 and " + MAX_PAGE_SIZE);
+        }
+
         ProductSearchService searchService = productSearchService.getIfAvailable();
         if (searchService == null) {
             throw new SearchUnavailableException("Product search is not available");

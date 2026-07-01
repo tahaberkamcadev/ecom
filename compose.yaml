@@ -341,6 +341,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: 'kafka:29092'
       SPRING_KAFKA_CONSUMER_GROUP_ID: projection-service
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      GATEWAY_SECRET: ${GATEWAY_SECRET}
 
   api-gateway:
     build:

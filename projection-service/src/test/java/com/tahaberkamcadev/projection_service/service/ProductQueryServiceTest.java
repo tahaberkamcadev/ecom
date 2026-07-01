@@ -72,7 +72,7 @@ class ProductQueryServiceTest {
                 Instant.now()
         );
 
-        when(productViewCacheService.findById(productId)).thenReturn(Optional.of(dto));
+        when(productViewCacheService.findById(productId)).thenReturn(dto);
 
         Optional<ProductView> result = productQueryService.findProductById(productId);
 
@@ -135,5 +135,12 @@ class ProductQueryServiceTest {
         assertThatThrownBy(() -> productQueryService.searchProducts("phone", null, null, 0, 20))
                 .isInstanceOf(SearchUnavailableException.class)
                 .hasMessage("Product search is not available");
+    }
+
+    @Test
+    void searchProducts_shouldRejectInvalidPageSize() {
+        assertThatThrownBy(() -> productQueryService.searchProducts("phone", null, true, 0, 101))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("size must be between 1 and 100");
     }
 }

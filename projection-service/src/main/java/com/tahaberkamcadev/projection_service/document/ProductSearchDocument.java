@@ -19,7 +19,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Setting(shards = 1, replicas = 0)
-@Document(indexName = "product_catalog")
+@Document(indexName = "product_catalog", createIndex = false)
 public class ProductSearchDocument {
 
     @Id
@@ -37,7 +37,7 @@ public class ProductSearchDocument {
     @Field(type = FieldType.Text)
     private String description;
 
-    @Field(type = FieldType.Double)
+    @Field(type = FieldType.Scaled_Float, scalingFactor = 100)
     private BigDecimal price;
 
     @Field(type = FieldType.Boolean)
@@ -46,7 +46,7 @@ public class ProductSearchDocument {
     @Field(type = FieldType.Boolean)
     private boolean active;
 
-    @Field(type = FieldType.Double)
+    @Field(type = FieldType.Scaled_Float, scalingFactor = 100)
     private BigDecimal averageRating;
 
     @Field(type = FieldType.Integer)

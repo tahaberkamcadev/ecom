@@ -67,6 +67,8 @@ class ProductSearchServiceTest {
         assertThat(document.getCategory()).isEqualTo("ELECTRONICS");
         assertThat(document.getName()).isEqualTo("Wireless Earbuds");
         assertThat(document.isInStock()).isTrue();
+        assertThat(document.getPrice()).isEqualByComparingTo(new BigDecimal("1299.99"));
+        assertThat(document.getAverageRating()).isEqualByComparingTo(new BigDecimal("4.50"));
     }
 
     @Test

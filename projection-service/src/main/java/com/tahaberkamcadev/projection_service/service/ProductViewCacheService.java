@@ -1,6 +1,5 @@
 package com.tahaberkamcadev.projection_service.service;
 
-import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.cache.annotation.Cacheable;
@@ -22,11 +21,12 @@ public class ProductViewCacheService {
     @Cacheable(
             cacheNames = CacheNames.PRODUCT_BY_ID,
             key = "#productId",
-            unless = "#result.isEmpty()"
+            unless = "#result == null"
     )
-    public Optional<ProductViewCacheDto> findById(UUID productId) {
+    public ProductViewCacheDto findById(UUID productId) {
         return productViewRepository.findById(productId)
                 .filter(ProductView::isActive)
-                .map(ProductViewCacheDto::from);
+                .map(ProductViewCacheDto::from)
+                .orElse(null);
     }
 }
