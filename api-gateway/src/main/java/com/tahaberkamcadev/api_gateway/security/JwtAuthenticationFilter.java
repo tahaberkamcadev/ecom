@@ -40,6 +40,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String method = request.getMethod();
         log.debug("Incoming request: {} {}", method, path);
 
+        if ("OPTIONS".equalsIgnoreCase(method)) {
+            chain.doFilter(request, response);
+            return;
+        }
+
         if (isPublicPath(path, method)) {
             log.debug("Public path, skipping JWT check: {} {}", method, path);
             MutableHttpServletRequest mutableRequest = stripUntrustedHeaders(request);

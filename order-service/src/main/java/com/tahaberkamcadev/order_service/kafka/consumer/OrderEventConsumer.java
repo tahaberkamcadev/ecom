@@ -114,7 +114,7 @@ public class OrderEventConsumer {
 
         if (processedEventService.markIfNew(event.getEventId(), "payment_completed")) {
             orderService.updateOrderStatus(event.getOrderId(), OrderStatus.DELIVERED);
-            log.info("Order {} marked as COMPLETED.", event.getOrderId());
+            log.info("Order {} marked as DELIVERED.", event.getOrderId());
         } else {
             log.info("Duplicate payment completed event received, ignoring. Event ID: {}", event.getEventId());
         }

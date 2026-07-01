@@ -29,10 +29,6 @@ public class OutboxEvent {
 
     @Column(nullable = false)
     private String aggregateType;
-    
-    // @Lob
-    // @Column(columnDefinition = "jsonb")
-    // private OrderPriceResponse payload;
 
     @Column(columnDefinition = "text")
     private String payload;

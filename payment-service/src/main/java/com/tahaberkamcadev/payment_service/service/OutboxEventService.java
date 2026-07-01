@@ -27,6 +27,7 @@ public class OutboxEventService {
             eventId, orderId, customerId, eventType
         );
         OutboxEvent event = OutboxEvent.builder()
+                .eventId(eventId)
                 .orderId(orderId)
                 .customerId(customerId)
                 .eventType(eventType)

@@ -4,9 +4,8 @@ import java.time.Instant;
 import java.util.UUID;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -25,8 +24,7 @@ public class OutboxEvent {
 
     @Column(name = "event_id", nullable = false, updatable = false)
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
-    private UUID eventId; // unique identifier for the event, used for idempotency checks
+    private UUID eventId;
 
     @Column(name = "order_id", nullable = false)
     private UUID orderId;
@@ -43,5 +41,12 @@ public class OutboxEvent {
     @Column(name = "timestamp")
     @Builder.Default
     private Instant timestamp = Instant.now();
+
+    @PrePersist
+    private void prePersist() {
+        if (eventId == null) {
+            eventId = UUID.randomUUID();
+        }
+    }
 
 }

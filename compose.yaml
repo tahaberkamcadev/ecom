@@ -100,6 +100,8 @@ services:
         condition: service_healthy
       postgres-review:
         condition: service_healthy
+      postgres-order:
+        condition: service_healthy
     ports:
       - '8083:8083'
     environment:
@@ -154,7 +156,6 @@ services:
       DB_PASSWORD: ${USER_DB_PASSWORD}
       KAFKA_ENABLED: 'false'
       EVENTS_ENABLED: 'false'
-      GATEWAY_SECRET: ${GATEWAY_SECRET}
       JWT_SECRET: ${JWT_SECRET}
 
   inventory-service:
@@ -198,7 +199,6 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: 'kafka:29092'
       SPRING_KAFKA_CONSUMER_GROUP_ID: order-service
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
-      GATEWAY_SECRET: ${GATEWAY_SECRET}
 
   postgres-payment:
     image: 'postgres:17-alpine'
@@ -341,7 +341,6 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: 'kafka:29092'
       SPRING_KAFKA_CONSUMER_GROUP_ID: projection-service
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
-      GATEWAY_SECRET: ${GATEWAY_SECRET}
 
   api-gateway:
     build:

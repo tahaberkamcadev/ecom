@@ -26,8 +26,7 @@ public class GatewayAuthFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        String provided = request.getHeader("X-Gateway-Secret");
-        if (!gatewaySecret.equals(provided)) {
+        if (!gatewaySecret.equals(request.getHeader("X-Gateway-Secret"))) {
             log.warn("Rejected direct access: {} {}", request.getMethod(), request.getRequestURI());
             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
