@@ -11,10 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.tahaberkamcadev.inventory_service.entity.OutboxEvent;
 import com.tahaberkamcadev.inventory_service.entity.Product;
-import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent.OrderItem;
 import com.tahaberkamcadev.inventory_service.repository.OutboxRepository;
-import com.tahaberkamcadev.inventory_service.repository.ProductRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,20 +24,6 @@ import tools.jackson.databind.ObjectMapper;
 public class OutboxEventService {
 
     private final OutboxRepository outboxEventRepository;
-    private final ProductRepository productRepository;
-
-    @Transactional
-    public void saveOutboxStockRevertedEvent(UUID orderId, UUID customerId, OrderEvent event) {
-        Map<String, Object> payloadData = new HashMap<>();
-        payloadData.put("eventId", UUID.randomUUID());
-        payloadData.put("orderId", orderId);
-        payloadData.put("customerId", customerId);
-        payloadData.put("eventType", "stock_reverted");
-        payloadData.put("aggregateType", "Inventory");
-        payloadData.put("totalAmount", calculateTotalAmount(event.getItems()));
-        persist("stock_reverted", payloadData);
-        log.info("Stock reverted outbox event saved for order {}", orderId);
-    }
 
     @Transactional
     public void saveOutboxReservedEvent(String aggregateType, UUID orderId, UUID customerId, List<OrderItem> items, BigDecimal totalAmount, String eventType) {
@@ -101,16 +85,6 @@ public class OutboxEventService {
         payloadData.put("inStock", product.getStock() > 0);
         payloadData.put("active", product.isActive());
         return payloadData;
-    }
-
-    private BigDecimal calculateTotalAmount(List<OrderItem> items) {
-        BigDecimal totalAmount = BigDecimal.ZERO;
-        for (OrderItem item : items) {
-            Product product = productRepository.findById(item.getProductId())
-                    .orElseThrow(() -> new IllegalArgumentException("Product not found: " + item.getProductId()));
-            totalAmount = totalAmount.add(product.getPrice().multiply(BigDecimal.valueOf(item.getQuantity())));
-        }
-        return totalAmount;
     }
 
     private void persistOutboxEvent(String aggregateType, String eventType, Map<String, Object> payloadData) {

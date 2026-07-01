@@ -13,7 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 import com.tahaberkamcadev.inventory_service.dto.StockAdjustment;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent.OrderItem;
-import com.tahaberkamcadev.inventory_service.service.OutboxEventService;
 import com.tahaberkamcadev.inventory_service.service.ProcessedEventService;
 import com.tahaberkamcadev.inventory_service.service.ProductService;
 
@@ -30,7 +29,6 @@ public class OrderCancelledEventConsumer {
 
     private final ProductService productService;
     private final ProcessedEventService processedEventService;
-    private final OutboxEventService outboxEventService;
 
     @KafkaListener(topics = "${app.kafka.topics.order-cancelled}", groupId = "${spring.kafka.consumer.group-id}")
     @Transactional
@@ -56,8 +54,7 @@ public class OrderCancelledEventConsumer {
 
         if (processedEventService.markIfNew(event.getEventId(), EVENT_TYPE)) {
             productService.increaseMultipleStock(adjustments);
-            outboxEventService.saveOutboxStockRevertedEvent(event.getOrderId(), event.getCustomerId(), event);
-            log.info("Stock reverted for cancelled order {}", event.getOrderId());
+            log.info("Stock restored for cancelled order {}", event.getOrderId());
         } else {
             log.info("Duplicate order_cancelled event received, ignoring. Event ID: {}", event.getEventId());
         }

@@ -2,7 +2,6 @@ package com.tahaberkamcadev.inventory_service.kafka.consumer;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -20,7 +19,6 @@ import org.springframework.kafka.support.Acknowledgment;
 
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent.OrderItem;
-import com.tahaberkamcadev.inventory_service.service.OutboxEventService;
 import com.tahaberkamcadev.inventory_service.service.ProcessedEventService;
 import com.tahaberkamcadev.inventory_service.service.ProductService;
 
@@ -36,9 +34,6 @@ class OrderCancelledEventConsumerTest {
     private ProcessedEventService processedEventService;
 
     @Mock
-    private OutboxEventService outboxEventService;
-
-    @Mock
     private Acknowledgment ack;
 
     @InjectMocks
@@ -52,7 +47,6 @@ class OrderCancelledEventConsumerTest {
         consumer.consumeOrderCancelledEvent(toJson(event), ack);
 
         verify(productService).increaseMultipleStock(any());
-        verify(outboxEventService).saveOutboxStockRevertedEvent(eq(event.getOrderId()), eq(event.getCustomerId()), any());
         verify(ack).acknowledge();
     }
 
