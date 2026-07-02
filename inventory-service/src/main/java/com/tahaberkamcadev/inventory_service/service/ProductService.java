@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.tahaberkamcadev.inventory_service.dto.CheckoutItemQuote;
+import com.tahaberkamcadev.inventory_service.dto.CheckoutQuoteResponse;
 import com.tahaberkamcadev.inventory_service.dto.ItemPrice;
 import com.tahaberkamcadev.inventory_service.dto.OrderPriceResponse;
 import com.tahaberkamcadev.inventory_service.dto.StockAdjustment;
@@ -38,19 +40,34 @@ public class ProductService {
         log.info("New product added: {}", saved.getName());
     }
 
-    public OrderPriceResponse getOrderPrice(List<OrderItem> orderItems) {
+    public CheckoutQuoteResponse checkout(List<OrderItem> orderItems) {
         validateOrderItems(orderItems);
-        List<ItemPrice> itemPrices = new ArrayList<>();
+        List<CheckoutItemQuote> items = new ArrayList<>();
         BigDecimal totalPrice = BigDecimal.ZERO;
+        boolean readyToPurchase = true;
+
         for (OrderItem orderItem : orderItems) {
-            Product product = productRepository.findById(orderItem.getProductId()).orElseThrow(() -> new IllegalArgumentException("Product not found: " + orderItem.getProductId()));
-            itemPrices.add(new ItemPrice(orderItem.getProductId(), product.getPrice()));
-            totalPrice = totalPrice.add(product.getPrice().multiply(BigDecimal.valueOf(orderItem.getQuantity())));
+            Product product = productRepository.findById(orderItem.getProductId())
+                    .orElseThrow(() -> new IllegalArgumentException("Product not found: " + orderItem.getProductId()));
+
+            boolean inStock = product.isActive() && product.getStock() >= orderItem.getQuantity();
+            if (!inStock) {
+                readyToPurchase = false;
+            }
+
+            BigDecimal lineTotal = product.getPrice().multiply(BigDecimal.valueOf(orderItem.getQuantity()));
+            totalPrice = totalPrice.add(lineTotal);
+            items.add(new CheckoutItemQuote(
+                    orderItem.getProductId(),
+                    orderItem.getQuantity(),
+                    product.getPrice(),
+                    lineTotal,
+                    inStock,
+                    product.getStock()
+            ));
         }
-        return OrderPriceResponse.builder()
-            .price(totalPrice)
-            .itemPrices(itemPrices)
-            .build();
+
+        return new CheckoutQuoteResponse(totalPrice, readyToPurchase, items);
     }
 
     @Transactional
@@ -64,12 +81,26 @@ public class ProductService {
             }
             publishOutOfStockIfDepleted(item.getProductId());
         }
-        OrderPriceResponse priceResponse = getOrderPrice(items);
+        OrderPriceResponse priceResponse = calculateOrderPrice(items);
         outboxEventService.saveOutboxReservedEvent("Inventory", orderId, customerId, items, priceResponse.getPrice(), "stock_updated");
         return OrderPriceResponse.builder()
                 .price(priceResponse.getPrice())
-                .orderId(orderId)
                 .itemPrices(priceResponse.getItemPrices())
+                .build();
+    }
+
+    private OrderPriceResponse calculateOrderPrice(List<OrderItem> orderItems) {
+        List<ItemPrice> itemPrices = new ArrayList<>();
+        BigDecimal totalPrice = BigDecimal.ZERO;
+        for (OrderItem orderItem : orderItems) {
+            Product product = productRepository.findById(orderItem.getProductId())
+                    .orElseThrow(() -> new IllegalArgumentException("Product not found: " + orderItem.getProductId()));
+            itemPrices.add(new ItemPrice(orderItem.getProductId(), product.getPrice()));
+            totalPrice = totalPrice.add(product.getPrice().multiply(BigDecimal.valueOf(orderItem.getQuantity())));
+        }
+        return OrderPriceResponse.builder()
+                .price(totalPrice)
+                .itemPrices(itemPrices)
                 .build();
     }
 

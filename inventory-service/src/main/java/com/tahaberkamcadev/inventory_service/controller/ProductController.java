@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.tahaberkamcadev.inventory_service.dto.CheckoutQuoteResponse;
 import com.tahaberkamcadev.inventory_service.dto.OrderPriceResponse;
 import com.tahaberkamcadev.inventory_service.dto.PurchaseRequest;
 import com.tahaberkamcadev.inventory_service.entity.Product;
@@ -43,8 +44,8 @@ public class ProductController {
     // data. So right before the purchase, client is making sure of price data is up to date.
     // More details in architecture decision record on readme.md file.
     @PostMapping("/checkout") // Only gateway can access this endpoint
-    public ResponseEntity<OrderPriceResponse> getOrderPrice(@RequestBody List<OrderItem> orderItems) {
-        OrderPriceResponse response = productService.getOrderPrice(orderItems);
+    public ResponseEntity<CheckoutQuoteResponse> checkout(@RequestBody List<OrderItem> orderItems) {
+        CheckoutQuoteResponse response = productService.checkout(orderItems);
         return ResponseEntity.ok(response);
     }
 

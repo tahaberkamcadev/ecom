@@ -255,14 +255,92 @@ class ProductServiceTest {
     }
 
     @Test
-    void getOrderPrice_shouldRejectNegativeQuantity() {
+    void checkout_shouldRejectNegativeQuantity() {
         OrderItem item = new OrderItem();
         item.setProductId(UUID.randomUUID());
         item.setQuantity(-2);
 
-        assertThatThrownBy(() -> productService.getOrderPrice(List.of(item)))
+        assertThatThrownBy(() -> productService.checkout(List.of(item)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("quantity must be positive");
         verify(productRepository, never()).findById(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void checkout_shouldReturnQuoteWhenItemsAreInStock() {
+        UUID productId = UUID.randomUUID();
+        Product product = Product.builder()
+                .id(productId)
+                .category(ProductCategory.ELECTRONICS)
+                .name("Phone")
+                .brand("BrandX")
+                .price(new BigDecimal("1299.99"))
+                .stock(10)
+                .active(true)
+                .build();
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+
+        OrderItem item = new OrderItem();
+        item.setProductId(productId);
+        item.setQuantity(2);
+
+        var response = productService.checkout(List.of(item));
+
+        assertThat(response.readyToPurchase()).isTrue();
+        assertThat(response.totalPrice()).isEqualByComparingTo(new BigDecimal("2599.98"));
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().getFirst().inStock()).isTrue();
+        assertThat(response.items().getFirst().availableQuantity()).isEqualTo(10);
+        assertThat(response.items().getFirst().unitPrice()).isEqualByComparingTo(new BigDecimal("1299.99"));
+        assertThat(response.items().getFirst().lineTotal()).isEqualByComparingTo(new BigDecimal("2599.98"));
+    }
+
+    @Test
+    void checkout_shouldMarkItemOutOfStockWhenQuantityExceedsAvailableStock() {
+        UUID productId = UUID.randomUUID();
+        Product product = Product.builder()
+                .id(productId)
+                .category(ProductCategory.ELECTRONICS)
+                .name("Phone")
+                .brand("BrandX")
+                .price(new BigDecimal("1299.99"))
+                .stock(1)
+                .active(true)
+                .build();
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+
+        OrderItem item = new OrderItem();
+        item.setProductId(productId);
+        item.setQuantity(2);
+
+        var response = productService.checkout(List.of(item));
+
+        assertThat(response.readyToPurchase()).isFalse();
+        assertThat(response.items().getFirst().inStock()).isFalse();
+        assertThat(response.items().getFirst().availableQuantity()).isEqualTo(1);
+    }
+
+    @Test
+    void checkout_shouldMarkInactiveProductAsOutOfStock() {
+        UUID productId = UUID.randomUUID();
+        Product product = Product.builder()
+                .id(productId)
+                .category(ProductCategory.ELECTRONICS)
+                .name("Phone")
+                .brand("BrandX")
+                .price(new BigDecimal("1299.99"))
+                .stock(10)
+                .active(false)
+                .build();
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+
+        OrderItem item = new OrderItem();
+        item.setProductId(productId);
+        item.setQuantity(1);
+
+        var response = productService.checkout(List.of(item));
+
+        assertThat(response.readyToPurchase()).isFalse();
+        assertThat(response.items().getFirst().inStock()).isFalse();
     }
 }
