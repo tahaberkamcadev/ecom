@@ -8,8 +8,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +18,7 @@ import com.tahaberkamcadev.projection_service.dto.LatestReviewSnippet;
 import com.tahaberkamcadev.projection_service.dto.ProductCommand;
 import com.tahaberkamcadev.projection_service.entity.ProductReviewView;
 import com.tahaberkamcadev.projection_service.entity.ProductView;
+import com.tahaberkamcadev.projection_service.application.event.ProductSearchSyncEvent;
 import com.tahaberkamcadev.projection_service.repository.ProductReviewViewRepository;
 import com.tahaberkamcadev.projection_service.repository.ProductViewRepository;
 
@@ -37,7 +38,7 @@ public class ProductProjectionService {
 
     private final ProductViewRepository productViewRepository;
     private final ProductReviewViewRepository productReviewViewRepository;
-    private final ObjectProvider<ProductSearchService> productSearchService;
+    private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
 
     @Transactional
@@ -57,7 +58,7 @@ public class ProductProjectionService {
             productView.setActive(command.active());
             productView.setUpdatedAt(now);
             productViewRepository.save(productView);
-            indexProduct(productView);
+            requestSearchIndex(command.productId());
             log.info("Product projection updated for product {}", command.productId());
             return;
         }
@@ -76,7 +77,7 @@ public class ProductProjectionService {
                 .build();
 
         productViewRepository.save(productView);
-        indexProduct(productView);
+        requestSearchIndex(command.productId());
         log.info("Product projection created for product {}", command.productId());
     }
 
@@ -93,7 +94,7 @@ public class ProductProjectionService {
         productView.setInStock(inStock);
         productView.setUpdatedAt(Instant.now());
         productViewRepository.save(productView);
-        indexProduct(productView);
+        requestSearchIndex(productId);
         log.info("Product projection {} stock availability updated to {}", productId, inStock);
     }
 
@@ -153,7 +154,7 @@ public class ProductProjectionService {
         ));
         productView.setUpdatedAt(Instant.now());
         productViewRepository.save(productView);
-        indexProduct(productView);
+        requestSearchIndex(productId);
         log.info("Review projection added for product {} review {}", productId, reviewId);
     }
 
@@ -167,7 +168,7 @@ public class ProductProjectionService {
         ProductView productView = productViewRepository.findById(productId).orElse(null);
         if (productView == null) {
             log.warn("Product view not found for deletion, skipping: {}", productId);
-            removeFromSearchIndex(productId);
+            requestSearchRemove(productId);
             return;
         }
 
@@ -175,16 +176,16 @@ public class ProductProjectionService {
         productView.setInStock(false);
         productView.setUpdatedAt(Instant.now());
         productViewRepository.save(productView);
-        removeFromSearchIndex(productId);
+        requestSearchRemove(productId);
         log.info("Product projection deactivated for product {}", productId);
     }
 
-    private void indexProduct(ProductView productView) {
-        productSearchService.ifAvailable(service -> service.index(productView));
+    private void requestSearchIndex(UUID productId) {
+        eventPublisher.publishEvent(ProductSearchSyncEvent.index(productId));
     }
 
-    private void removeFromSearchIndex(UUID productId) {
-        productSearchService.ifAvailable(service -> service.remove(productId));
+    private void requestSearchRemove(UUID productId) {
+        eventPublisher.publishEvent(ProductSearchSyncEvent.remove(productId));
     }
 
     private String appendLatestReview(String currentJson, LatestReviewSnippet review) {
