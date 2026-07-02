@@ -1,6 +1,6 @@
 package com.tahaberkamcadev.e_com.user_service.repository;
 
-import com.tahaberkamcadev.e_com.user_service.model.User;
+import com.tahaberkamcadev.e_com.user_service.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;

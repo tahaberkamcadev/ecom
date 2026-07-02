@@ -1,7 +1,7 @@
 package com.tahaberkamcadev.e_com.user_service.security;
 
-import com.tahaberkamcadev.e_com.user_service.model.Role;
-import com.tahaberkamcadev.e_com.user_service.model.User;
+import com.tahaberkamcadev.e_com.user_service.entity.Role;
+import com.tahaberkamcadev.e_com.user_service.entity.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

@@ -1,4 +1,4 @@
-package com.tahaberkamcadev.e_com.user_service.model;
+package com.tahaberkamcadev.e_com.user_service.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

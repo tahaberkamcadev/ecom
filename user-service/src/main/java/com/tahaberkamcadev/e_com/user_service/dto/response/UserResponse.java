@@ -1,7 +1,7 @@
 package com.tahaberkamcadev.e_com.user_service.dto.response;
 
-import com.tahaberkamcadev.e_com.user_service.model.Role;
-import com.tahaberkamcadev.e_com.user_service.model.User;
+import com.tahaberkamcadev.e_com.user_service.entity.Role;
+import com.tahaberkamcadev.e_com.user_service.entity.User;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
