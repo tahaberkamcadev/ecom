@@ -16,7 +16,7 @@ RUN ./mvnw package -Dmaven.test.skip=true -q
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-COPY --from=build /app/target/payment-service-0.0.1-SNAPSHOT.jar app.jar
+COPY --from=build /app/target/*.jar app.jar
 RUN chown appuser:appgroup app.jar
 USER appuser
 EXPOSE 8084
