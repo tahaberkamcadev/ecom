@@ -112,6 +112,7 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
       - './infra/grafana/provisioning:/etc/grafana/provisioning:ro'
+      - './infra/grafana/dashboards:/var/lib/grafana/dashboards:ro'
 
   connect:
     image: 'debezium/connect:2.7.3.Final'

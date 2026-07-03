@@ -1,0 +1,135 @@
+{
+  "uid": "ecom-stack",
+  "title": "E-Commerce Stack",
+  "description": "Minimal stack health: service uptime, HTTP traffic, errors, JVM heap.",
+  "tags": ["ecom", "prometheus"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "editable": true,
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Services UP",
+      "description": "Spring Boot targets scraped by Prometheus. Expect 7 when the full stack is running.",
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(up{job=\"spring-boot\"})",
+          "legendFormat": "up"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "green", "value": 7 }
+            ]
+          },
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "HTTP Request Rate",
+      "description": "Requests per second by service (gateway, inventory, review, projection).",
+      "gridPos": { "h": 8, "w": 18, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (rate(http_server_requests_seconds_count[5m]))",
+          "legendFormat": "{{application}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "HTTP 5xx Error Rate",
+      "description": "Server errors per second. Should stay at zero during normal operation.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (rate(http_server_requests_seconds_count{status=~\"5..\"}[5m]))",
+          "legendFormat": "{{application}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" },
+          "unit": "reqps",
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "JVM Heap Used",
+      "description": "Heap memory by service. Useful after purchases or under load.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (jvm_memory_used_bytes{area=\"heap\"})",
+          "legendFormat": "{{application}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    }
+  ]
+}
