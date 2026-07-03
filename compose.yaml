@@ -89,6 +89,30 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: 'kafka:29092'
       DYNAMIC_CONFIG_ENABLED: 'true'
 
+  prometheus:
+    image: 'prom/prometheus:v3.2.1'
+    ports:
+      - '9090:9090'
+    volumes:
+      - './infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro'
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+
+  grafana:
+    image: 'grafana/grafana:11.5.2'
+    depends_on:
+      - prometheus
+    ports:
+      - '3000:3000'
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - './infra/grafana/provisioning:/etc/grafana/provisioning:ro'
+
   connect:
     image: 'debezium/connect:2.7.3.Final'
     depends_on:
@@ -374,3 +398,5 @@ volumes:
   payment_pg:
   review_pg:
   projection_pg:
+  prometheus_data:
+  grafana_data:
