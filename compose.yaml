@@ -182,6 +182,12 @@ services:
       KAFKA_ENABLED: 'false'
       EVENTS_ENABLED: 'false'
       JWT_SECRET: ${JWT_SECRET}
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fs http://localhost:8081/actuator/health/readiness']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
 
   inventory-service:
     build:
@@ -205,6 +211,12 @@ services:
       SPRING_KAFKA_CONSUMER_GROUP_ID: inventory-service
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       GATEWAY_SECRET: ${GATEWAY_SECRET}
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fs http://localhost:8082/actuator/health/readiness']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
 
   order-service:
     build:
@@ -224,6 +236,12 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: 'kafka:29092'
       SPRING_KAFKA_CONSUMER_GROUP_ID: order-service
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fs http://localhost:8083/actuator/health/readiness']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
 
   postgres-payment:
     image: 'postgres:17-alpine'
@@ -262,6 +280,12 @@ services:
       SPRING_KAFKA_CONSUMER_GROUP_ID: payment-service
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       GATEWAY_SECRET: ${GATEWAY_SECRET}
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fs http://localhost:8084/actuator/health/readiness']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
 
   postgres-review:
     image: 'postgres:17-alpine'
@@ -298,6 +322,12 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${REVIEW_DB_PASSWORD}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       GATEWAY_SECRET: ${GATEWAY_SECRET}
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fs http://localhost:8086/actuator/health/readiness']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
 
   postgres-projection:
     image: 'postgres:17-alpine'
@@ -367,6 +397,12 @@ services:
       SPRING_KAFKA_CONSUMER_GROUP_ID: projection-service
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       GATEWAY_SECRET: ${GATEWAY_SECRET}
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fs http://localhost:8087/actuator/health/readiness']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 150s
 
   api-gateway:
     build:
@@ -374,13 +410,13 @@ services:
       dockerfile: Dockerfile
     depends_on:
       user-service:
-        condition: service_started
+        condition: service_healthy
       inventory-service:
-        condition: service_started
+        condition: service_healthy
       review-service:
-        condition: service_started
+        condition: service_healthy
       projection-service:
-        condition: service_started
+        condition: service_healthy
     ports:
       - '8080:8080'
     environment:
@@ -391,6 +427,12 @@ services:
       PROJECTION_SERVICE_URL: 'http://projection-service:8087'
       JWT_SECRET: ${JWT_SECRET}
       GATEWAY_SECRET: ${GATEWAY_SECRET}
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fs http://localhost:8080/actuator/health/readiness']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 
 volumes:
   user_pg:

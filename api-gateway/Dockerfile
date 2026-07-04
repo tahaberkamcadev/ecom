@@ -17,6 +17,7 @@ FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN apk add --no-cache curl
 
 COPY --from=build /app/target/*.jar app.jar
 

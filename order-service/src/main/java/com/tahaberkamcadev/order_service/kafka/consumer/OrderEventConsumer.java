@@ -11,6 +11,7 @@ import com.tahaberkamcadev.order_service.dto.OrderItem;
 import com.tahaberkamcadev.order_service.dto.OrderStatus;
 import com.tahaberkamcadev.order_service.kafka.event.inbound.InventoryEvent;
 import com.tahaberkamcadev.order_service.kafka.event.inbound.PaymentEvent;
+import com.tahaberkamcadev.order_service.metrics.EcomBusinessMetrics;
 import com.tahaberkamcadev.order_service.service.OrderService;
 import com.tahaberkamcadev.order_service.service.OutboxEventService;
 import com.tahaberkamcadev.order_service.service.ProcessedEventService;
@@ -30,6 +31,7 @@ public class OrderEventConsumer {
     private final OrderService orderService;
     private final ProcessedEventService processedEventService;
     private final OutboxEventService outboxEventService;
+    private final EcomBusinessMetrics ecomBusinessMetrics;
 
     @KafkaListener(topics = "saga.inventory.stock_updated", groupId = "${spring.kafka.consumer.group-id}")
     @Transactional
@@ -89,6 +91,7 @@ public class OrderEventConsumer {
                     "order_cancelled",
                     items
             );
+            ecomBusinessMetrics.recordSagaCompensation();
             log.info("Order {} cancelled, stock rollback event published.", event.getOrderId());
         } else {
             log.info("Duplicate payment failed event received, ignoring. Event ID: {}", event.getEventId());

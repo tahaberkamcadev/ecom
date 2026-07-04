@@ -22,6 +22,7 @@ import com.tahaberkamcadev.inventory_service.dto.ProductCategory;
 import com.tahaberkamcadev.inventory_service.dto.StockAdjustment;
 import com.tahaberkamcadev.inventory_service.entity.Product;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent.OrderItem;
+import com.tahaberkamcadev.inventory_service.metrics.EcomBusinessMetrics;
 import com.tahaberkamcadev.inventory_service.repository.ProductRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -32,6 +33,9 @@ class ProductServiceTest {
 
     @Mock
     private OutboxEventService outboxEventService;
+
+    @Mock
+    private EcomBusinessMetrics ecomBusinessMetrics;
 
     @InjectMocks
     private ProductService productService;

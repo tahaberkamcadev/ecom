@@ -22,6 +22,7 @@ import com.tahaberkamcadev.inventory_service.dto.StockAdjustment;
 import com.tahaberkamcadev.inventory_service.entity.Product;
 import com.tahaberkamcadev.inventory_service.exception.InsufficientStockException;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent.OrderItem;
+import com.tahaberkamcadev.inventory_service.metrics.EcomBusinessMetrics;
 
 @Service
 @Slf4j
@@ -29,6 +30,7 @@ import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent.Orde
 public class ProductService {
     private final ProductRepository productRepository;
     private final OutboxEventService outboxEventService;
+    private final EcomBusinessMetrics ecomBusinessMetrics;
 
     @Transactional
     public void saveProduct(Product product) {
@@ -83,6 +85,7 @@ public class ProductService {
         }
         OrderPriceResponse priceResponse = calculateOrderPrice(items);
         outboxEventService.saveOutboxReservedEvent("Inventory", orderId, customerId, items, priceResponse.getPrice(), "stock_updated");
+        ecomBusinessMetrics.recordPurchase();
         return OrderPriceResponse.builder()
                 .price(priceResponse.getPrice())
                 .itemPrices(priceResponse.getItemPrices())
