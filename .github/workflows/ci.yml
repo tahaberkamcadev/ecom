@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  discover-services:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.find.outputs.services }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find Maven service directories
+        id: find
+        run: |
+          SERVICES=$(find . -mindepth 2 -maxdepth 2 -name pom.xml \
+            | xargs -n1 dirname \
+            | xargs -n1 basename \
+            | sort \
+            | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "Discovered services: $SERVICES"
+          echo "services=$SERVICES" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: discover-services
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJson(needs.discover-services.outputs.services) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Test ${{ matrix.service }}
+        working-directory: ${{ matrix.service }}
+        run: |
+          chmod +x mvnw
+          ./mvnw -B verify
