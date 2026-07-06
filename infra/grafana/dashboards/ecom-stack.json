@@ -5,7 +5,7 @@
   "tags": ["ecom", "prometheus"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 4,
   "refresh": "5s",
   "time": {
     "from": "now-15m",
@@ -82,13 +82,13 @@
       "id": 3,
       "type": "timeseries",
       "title": "HTTP 5xx Error Rate",
-      "description": "Server errors per second. Should stay at zero during normal operation.",
+      "description": "Server errors (5xx) per second across all Spring Boot services: api-gateway, user-service, inventory-service, order-service, payment-service, review-service, projection-service.",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (application) (rate(http_server_requests_seconds_count{status=~\"5..\"}[5m]))",
+          "expr": "sum by (application) (rate(http_server_requests_seconds_count{job=\"spring-boot\", application=~\"api-gateway|user-service|inventory-service|order-service|payment-service|review-service|projection-service\", outcome=\"SERVER_ERROR\", uri!~\"/actuator.*\"}[5m]))",
           "legendFormat": "{{application}}"
         }
       ],
@@ -160,24 +160,46 @@
     {
       "id": 6,
       "type": "timeseries",
-      "title": "DB Pool Active Connections",
-      "description": "HikariCP active connections per service.",
+      "title": "DB Pool Connections",
+      "description": "Total = open pool connections (idle + active); all DB services keep idle connections warm. Active = connections executing a query (brief spikes during HTTP/Kafka transactions).",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (application) (hikaricp_connections_active)",
-          "legendFormat": "{{application}}"
+          "expr": "sum by (application) (hikaricp_connections{job=\"spring-boot\", application=~\"user-service|inventory-service|order-service|payment-service|review-service|projection-service\"})",
+          "legendFormat": "{{application}} total"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (application) (hikaricp_connections_active{job=\"spring-boot\", application=~\"user-service|inventory-service|order-service|payment-service|review-service|projection-service\"})",
+          "legendFormat": "{{application}} active"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" },
           "unit": "none",
-          "decimals": 0
+          "decimals": 0,
+          "min": 0
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": "/ total$/" },
+            "properties": [
+              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [8, 8] } },
+              { "id": "custom.fillOpacity", "value": 0 },
+              { "id": "custom.lineWidth", "value": 1 }
+            ]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": "/ active$/" },
+            "properties": [
+              { "id": "custom.lineWidth", "value": 2 },
+              { "id": "custom.fillOpacity", "value": 25 }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
