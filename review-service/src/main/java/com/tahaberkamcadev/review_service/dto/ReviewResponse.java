@@ -8,6 +8,8 @@ import com.tahaberkamcadev.review_service.entity.Review;
 public record ReviewResponse(
         UUID id,
         UUID userId,
+        String userFirstName,
+        String userLastName,
         UUID productId,
         int rating,
         String comment,
@@ -17,6 +19,8 @@ public record ReviewResponse(
         return new ReviewResponse(
                 review.getId(),
                 review.getUserId(),
+                review.getUserFirstName(),
+                review.getUserLastName(),
                 review.getProductId(),
                 review.getRating(),
                 review.getComment(),

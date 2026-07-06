@@ -62,11 +62,12 @@ public class SecurityConfig {
                                 .includeSubDomains(true)))
                 .authorizeHttpRequests(auth -> {
                     auth.requestMatchers(PUBLIC_PATHS).permitAll();
+                    auth.requestMatchers("/api/v1/internal/**").permitAll();
 
                     if (swaggerEnabled) {
                         auth.requestMatchers(SWAGGER_PATHS).permitAll();
                     }
-                    
+
                     auth.requestMatchers(HttpMethod.GET, "/api/v1/users").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/users/**").hasRole("ADMIN")
                         .anyRequest().authenticated();

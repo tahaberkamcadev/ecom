@@ -188,6 +188,8 @@ public class ProjectionEventConsumer {
                 || event.getReviewId() == null
                 || event.getProductId() == null
                 || event.getUserId() == null
+                || event.getUserFirstName() == null
+                || event.getUserLastName() == null
                 || event.getCreatedAt() == null) {
             throw new IllegalArgumentException("Received invalid ReviewCreatedEvent: " + event);
         }
@@ -197,6 +199,8 @@ public class ProjectionEventConsumer {
                     event.getReviewId(),
                     event.getProductId(),
                     event.getUserId(),
+                    event.getUserFirstName(),
+                    event.getUserLastName(),
                     event.getRating(),
                     event.getComment(),
                     event.getCreatedAt()

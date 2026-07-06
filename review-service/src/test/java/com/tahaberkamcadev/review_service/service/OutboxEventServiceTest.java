@@ -36,6 +36,8 @@ class OutboxEventServiceTest {
         Review review = Review.builder()
                 .id(reviewId)
                 .userId(userId)
+                .userFirstName("John")
+                .userLastName("Doe")
                 .productId(productId)
                 .rating(5)
                 .comment("Excellent")
@@ -56,5 +58,7 @@ class OutboxEventServiceTest {
         assertThat(event.getPayload()).contains(productId.toString());
         assertThat(event.getPayload()).contains("\"rating\":5");
         assertThat(event.getPayload()).contains("Excellent");
+        assertThat(event.getPayload()).contains("\"userFirstName\":\"John\"");
+        assertThat(event.getPayload()).contains("\"userLastName\":\"Doe\"");
     }
 }

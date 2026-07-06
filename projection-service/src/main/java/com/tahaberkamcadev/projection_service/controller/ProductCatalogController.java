@@ -13,8 +13,8 @@ import org.springframework.web.bind.annotation.RestController;
 import com.tahaberkamcadev.projection_service.dto.response.ProductDetailResponse;
 import com.tahaberkamcadev.projection_service.dto.response.ProductSearchPageResponse;
 import com.tahaberkamcadev.projection_service.dto.response.ProductSummaryResponse;
+import com.tahaberkamcadev.projection_service.dto.response.ProductReviewResponse;
 import com.tahaberkamcadev.projection_service.dto.response.ReviewPageResponse;
-import com.tahaberkamcadev.projection_service.dto.response.ReviewSnippetResponse;
 import com.tahaberkamcadev.projection_service.entity.ProductView;
 import com.tahaberkamcadev.projection_service.enums.ProductCategory;
 import com.tahaberkamcadev.projection_service.exception.ResourceNotFoundException;
@@ -70,8 +70,8 @@ public class ProductCatalogController {
         }
 
         ReviewPageQueryResult result = productQueryService.findReviewsByProductId(productId, page, size);
-        List<ReviewSnippetResponse> reviews = result.reviews().stream()
-                .map(catalogMapper::toReviewSnippet)
+        List<ProductReviewResponse> reviews = result.reviews().stream()
+                .map(catalogMapper::toProductReview)
                 .toList();
         return ResponseEntity.ok(new ReviewPageResponse(reviews, result.total(), result.page(), result.size()));
     }

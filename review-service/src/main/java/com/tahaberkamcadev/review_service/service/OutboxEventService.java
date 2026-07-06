@@ -33,6 +33,8 @@ public class OutboxEventService {
                 "eventType", "review_created",
                 "reviewId", review.getId().toString(),
                 "userId", review.getUserId().toString(),
+                "userFirstName", review.getUserFirstName(),
+                "userLastName", review.getUserLastName(),
                 "productId", review.getProductId().toString(),
                 "rating", review.getRating(),
                 "comment", review.getComment(),

@@ -8,6 +8,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
+import com.tahaberkamcadev.inventory_service.client.ReviewSeedClient;
 import com.tahaberkamcadev.inventory_service.dto.ProductCategory;
 import com.tahaberkamcadev.inventory_service.entity.Product;
 import com.tahaberkamcadev.inventory_service.repository.ProductRepository;
@@ -24,6 +25,7 @@ public class DevDataSeeder implements ApplicationRunner {
 
     private final ProductRepository productRepository;
     private final ProductService productService;
+    private final ReviewSeedClient reviewSeedClient;
 
     @Override
     public void run(ApplicationArguments args) {
@@ -31,7 +33,8 @@ public class DevDataSeeder implements ApplicationRunner {
             return;
         }
 
-        for (ProductSeed seed : PRODUCT_SEEDS) {
+        for (int productIndex = 0; productIndex < PRODUCT_SEEDS.size(); productIndex++) {
+            ProductSeed seed = PRODUCT_SEEDS.get(productIndex);
             Product product = Product.builder()
                     .category(seed.category())
                     .name(seed.name())
@@ -41,7 +44,8 @@ public class DevDataSeeder implements ApplicationRunner {
                     .stock(seed.stock())
                     .active(true)
                     .build();
-            productService.saveProduct(product);
+            Product saved = productService.saveProduct(product);
+            reviewSeedClient.seedDemoReviews(saved.getId(), productIndex);
         }
 
         log.info("Seeded {} demo products for local development", PRODUCT_SEEDS.size());

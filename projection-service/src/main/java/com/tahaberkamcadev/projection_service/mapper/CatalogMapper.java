@@ -10,6 +10,7 @@ import com.tahaberkamcadev.projection_service.dto.response.OrderDetailResponse;
 import com.tahaberkamcadev.projection_service.dto.response.OrderLineItemResponse;
 import com.tahaberkamcadev.projection_service.dto.response.OrderSummaryResponse;
 import com.tahaberkamcadev.projection_service.dto.response.ProductDetailResponse;
+import com.tahaberkamcadev.projection_service.dto.response.ProductReviewResponse;
 import com.tahaberkamcadev.projection_service.dto.response.ProductSummaryResponse;
 import com.tahaberkamcadev.projection_service.dto.response.ReviewSnippetResponse;
 import com.tahaberkamcadev.projection_service.entity.OrderLineItemView;
@@ -68,6 +69,18 @@ public class CatalogMapper {
         return new ReviewSnippetResponse(
                 review.getReviewId(),
                 review.getUserId(),
+                review.getRating(),
+                review.getComment(),
+                review.getCreatedAt()
+        );
+    }
+
+    public ProductReviewResponse toProductReview(ProductReviewView review) {
+        return new ProductReviewResponse(
+                review.getReviewId(),
+                review.getUserId(),
+                review.getUserFirstName(),
+                review.getUserLastName(),
                 review.getRating(),
                 review.getComment(),
                 review.getCreatedAt()

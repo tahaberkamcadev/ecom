@@ -106,6 +106,8 @@ class ProductQueryServiceTest {
                 .reviewId(UUID.randomUUID())
                 .productId(productId)
                 .userId(UUID.randomUUID())
+                .userFirstName("Jane")
+                .userLastName("Doe")
                 .rating(4)
                 .comment("Good")
                 .createdAt(Instant.now())

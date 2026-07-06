@@ -35,6 +35,12 @@ public class Review {
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
+    @Column(name = "user_first_name", nullable = false, length = 100)
+    private String userFirstName;
+
+    @Column(name = "user_last_name", nullable = false, length = 100)
+    private String userLastName;
+
     @Column(name = "product_id", nullable = false)
     private UUID productId;
 

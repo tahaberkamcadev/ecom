@@ -2,6 +2,7 @@ package com.tahaberkamcadev.e_com.user_service.service;
 
 import com.tahaberkamcadev.e_com.user_service.dto.request.ChangePasswordRequest;
 import com.tahaberkamcadev.e_com.user_service.dto.request.UpdateUserRequest;
+import com.tahaberkamcadev.e_com.user_service.dto.response.UserNameResponse;
 import com.tahaberkamcadev.e_com.user_service.dto.response.UserResponse;
 import com.tahaberkamcadev.e_com.user_service.exception.UnauthorizedAccessException;
 import com.tahaberkamcadev.e_com.user_service.exception.UserNotFoundException;
@@ -34,6 +35,13 @@ public class UserService {
                 .stream()
                 .map(UserResponse::fromEntity)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public UserNameResponse getUserNameById(UUID id) {
+        return userRepository.findById(id)
+                .map(user -> new UserNameResponse(user.getFirstName(), user.getLastName()))
+                .orElseThrow(() -> new UserNotFoundException(id));
     }
 
     @Transactional(readOnly = true)

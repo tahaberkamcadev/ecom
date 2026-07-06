@@ -207,6 +207,7 @@ services:
       KAFKA_ENABLED: 'false'
       EVENTS_ENABLED: 'false'
       JWT_SECRET: ${JWT_SECRET}
+      GATEWAY_SECRET: ${GATEWAY_SECRET}
     healthcheck:
       test: ['CMD-SHELL', 'curl -fs http://localhost:8081/actuator/health/readiness']
       interval: 15s
@@ -225,6 +226,8 @@ services:
         condition: service_healthy
       connect-init:
         condition: service_completed_successfully
+      review-service:
+        condition: service_healthy
     ports:
       - '8082:8082'
     environment:
@@ -236,6 +239,7 @@ services:
       SPRING_KAFKA_CONSUMER_GROUP_ID: inventory-service
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       GATEWAY_SECRET: ${GATEWAY_SECRET}
+      REVIEW_SERVICE_URL: 'http://review-service:8086'
     healthcheck:
       test: ['CMD-SHELL', 'curl -fs http://localhost:8082/actuator/health/readiness']
       interval: 15s
@@ -347,6 +351,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${REVIEW_DB_PASSWORD}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       GATEWAY_SECRET: ${GATEWAY_SECRET}
+      USER_SERVICE_URL: 'http://user-service:8081'
     healthcheck:
       test: ['CMD-SHELL', 'curl -fs http://localhost:8086/actuator/health/readiness']
       interval: 15s

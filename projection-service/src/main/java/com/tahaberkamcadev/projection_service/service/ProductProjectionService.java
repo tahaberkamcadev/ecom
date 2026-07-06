@@ -104,12 +104,17 @@ public class ProductProjectionService {
             UUID reviewId,
             UUID productId,
             UUID userId,
+            String userFirstName,
+            String userLastName,
             int rating,
             String comment,
             Instant createdAt
     ) {
         if (reviewId == null || productId == null || userId == null || createdAt == null) {
             throw new IllegalArgumentException("reviewId, productId, userId and createdAt must not be null");
+        }
+        if (userFirstName == null || userFirstName.isBlank() || userLastName == null || userLastName.isBlank()) {
+            throw new IllegalArgumentException("userFirstName and userLastName must not be blank");
         }
         if (rating < 1 || rating > 5) {
             throw new IllegalArgumentException("rating must be between 1 and 5");
@@ -135,6 +140,8 @@ public class ProductProjectionService {
                 .reviewId(reviewId)
                 .productId(productId)
                 .userId(userId)
+                .userFirstName(userFirstName.trim())
+                .userLastName(userLastName.trim())
                 .rating(rating)
                 .comment(comment)
                 .createdAt(createdAt)

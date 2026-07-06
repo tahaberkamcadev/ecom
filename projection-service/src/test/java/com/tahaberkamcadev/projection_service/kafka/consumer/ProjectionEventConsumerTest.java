@@ -165,6 +165,8 @@ class ProjectionEventConsumerTest {
                 event.getReviewId(),
                 event.getProductId(),
                 event.getUserId(),
+                event.getUserFirstName(),
+                event.getUserLastName(),
                 event.getRating(),
                 event.getComment(),
                 event.getCreatedAt()
@@ -228,6 +230,8 @@ class ProjectionEventConsumerTest {
         event.setEventType("review_created");
         event.setReviewId(UUID.randomUUID());
         event.setUserId(UUID.randomUUID());
+        event.setUserFirstName("Jane");
+        event.setUserLastName("Doe");
         event.setProductId(UUID.randomUUID());
         event.setRating(5);
         event.setComment("Great product");

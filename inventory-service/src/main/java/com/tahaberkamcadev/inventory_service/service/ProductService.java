@@ -33,13 +33,14 @@ public class ProductService {
     private final EcomBusinessMetrics ecomBusinessMetrics;
 
     @Transactional
-    public void saveProduct(Product product) {
+    public Product saveProduct(Product product) {
         if (product.getStock() <= 0) {
             throw new IllegalArgumentException("Initial stock must be positive: " + product.getStock());
         }
         Product saved = productRepository.save(product);
         outboxEventService.saveOutboxProductEvent(saved, "product_created");
         log.info("New product added: {}", saved.getName());
+        return saved;
     }
 
     public CheckoutQuoteResponse checkout(List<OrderItem> orderItems) {

@@ -19,9 +19,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.tahaberkamcadev.projection_service.dto.response.ProductDetailResponse;
+import com.tahaberkamcadev.projection_service.dto.response.ProductReviewResponse;
 import com.tahaberkamcadev.projection_service.dto.response.ProductSearchPageResponse;
 import com.tahaberkamcadev.projection_service.dto.response.ProductSummaryResponse;
-import com.tahaberkamcadev.projection_service.dto.response.ReviewSnippetResponse;
 import com.tahaberkamcadev.projection_service.entity.ProductReviewView;
 import com.tahaberkamcadev.projection_service.entity.ProductView;
 import com.tahaberkamcadev.projection_service.enums.ProductCategory;
@@ -178,14 +178,18 @@ class ProductCatalogControllerTest {
                 .reviewId(reviewId)
                 .productId(productId)
                 .userId(userId)
+                .userFirstName("John")
+                .userLastName("Doe")
                 .rating(5)
                 .comment("Excellent")
                 .createdAt(createdAt)
                 .build();
 
-        ReviewSnippetResponse snippet = new ReviewSnippetResponse(
+        ProductReviewResponse reviewResponse = new ProductReviewResponse(
                 reviewId,
                 userId,
+                "John",
+                "Doe",
                 5,
                 "Excellent",
                 createdAt
@@ -194,7 +198,7 @@ class ProductCatalogControllerTest {
         when(productQueryService.productExists(productId)).thenReturn(true);
         when(productQueryService.findReviewsByProductId(productId, 0, 20))
                 .thenReturn(new ReviewPageQueryResult(List.of(reviewView), 1, 0, 20));
-        when(catalogMapper.toReviewSnippet(reviewView)).thenReturn(snippet);
+        when(catalogMapper.toProductReview(reviewView)).thenReturn(reviewResponse);
 
         mockMvc.perform(get("/api/catalog/products/{productId}/reviews", productId)
                         .param("page", "0")
@@ -202,6 +206,8 @@ class ProductCatalogControllerTest {
                         .header("X-Gateway-Secret", GATEWAY_SECRET))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.total").value(1))
-                .andExpect(jsonPath("$.items[0].comment").value("Excellent"));
+                .andExpect(jsonPath("$.items[0].comment").value("Excellent"))
+                .andExpect(jsonPath("$.items[0].userFirstName").value("John"))
+                .andExpect(jsonPath("$.items[0].userLastName").value("Doe"));
     }
 }

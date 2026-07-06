@@ -9,4 +9,6 @@ import com.tahaberkamcadev.review_service.entity.Review;
 public interface ReviewRepository extends JpaRepository<Review, UUID> {
 
     boolean existsByUserIdAndProductId(UUID userId, UUID productId);
+
+    boolean existsByProductId(UUID productId);
 }

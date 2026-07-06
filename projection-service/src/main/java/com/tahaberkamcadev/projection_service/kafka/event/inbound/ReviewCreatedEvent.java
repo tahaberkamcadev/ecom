@@ -12,6 +12,8 @@ public class ReviewCreatedEvent {
     private String eventType;
     private UUID reviewId;
     private UUID userId;
+    private String userFirstName;
+    private String userLastName;
     private UUID productId;
     private int rating;
     private String comment;
