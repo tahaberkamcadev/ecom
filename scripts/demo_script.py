@@ -1,7 +1,7 @@
 """
 Requirements:
   pip install -r scripts/requirements.txt
-  docker compose up -d
+  docker compose up -d --build
 
 Usage:
   python scripts/bulk_purchase_demo.py
@@ -133,7 +133,7 @@ def ensure_seed_products_exist(catalog: dict[str, str]) -> None:
         raise RuntimeError(
             "Expected demo products not found in catalog: "
             + ", ".join(missing)
-            + ". For clean seed: docker compose down -v && docker compose up -d"
+            + ". For clean seed: docker compose down -v && docker compose up -d --build"
         )
 
 
@@ -212,7 +212,7 @@ def main() -> None:
 
     except requests.ConnectionError as exc:
         print(f"Connection error: {exc}", file=sys.stderr)
-        print("Is the stack running? → docker compose up -d", file=sys.stderr)
+        print("Is the stack running? → docker compose up -d --build", file=sys.stderr)
         sys.exit(1)
     except requests.HTTPError as exc:
         body = exc.response.text if exc.response is not None else ""

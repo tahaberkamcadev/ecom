@@ -2,6 +2,8 @@
 
 > Portfolio-grade **event-driven microservices** reference implementation: **distributed saga**, **transactional outbox**, **CQRS read models**, **JWT-secured API gateway**, and a full **observability stack** — runnable locally with a single `docker compose up`.
 
+**Frontend (separate repo):** [ecom-client](https://github.com/tahaberkamcadev/ecom-client) — web UI for browsing the catalog, checkout, and purchase flows against this backend. The fastest way to exercise the stack without curl or scripts.
+
 [Java](https://openjdk.org/)
 [Spring Boot](https://spring.io/projects/spring-boot)
 [Kafka](https://kafka.apache.org/)
@@ -21,6 +23,7 @@
 - [Reliability & Security Patterns](#reliability--security-patterns)
 - [Observability](#observability)
 - [Quick Start](#quick-start)
+- [Frontend Client](#frontend-client)
 - [Demo Script](#demo-script)
 - [API Entry Points](#api-entry-points)
 - [Testing](#testing)
@@ -55,7 +58,7 @@ The stack is intentionally **over-instrumented for a portfolio project** so revi
 ## Architecture at a Glance
 
 ```
-Clients ──► API Gateway (JWT) ──► user-service | inventory-service | review-service | projection-service
+Web UI (ecom-client) or API clients ──► API Gateway (JWT) ──► user-service | inventory-service | review-service | projection-service
                                       │                │
                                       │                └── synchronous stock reserve (write path)
                                       │
@@ -177,6 +180,7 @@ sequenceDiagram
 | **Observability**      | **Micrometer**, **Prometheus**, **Grafana**, **Loki**, **Promtail**         |
 | **Packaging**          | **Docker**, **Docker Compose**, multi-stage Dockerfiles, readiness probes   |
 | **Testing**            | JUnit 5, Mockito, AssertJ, `@WebMvcTest`, service-layer unit tests          |
+| **Frontend**           | [ecom-client](https://github.com/tahaberkamcadev/ecom-client) (separate repo) |
 
 
 ---
@@ -256,6 +260,33 @@ Pre-provisioned **Grafana** dashboards (folder: **E-Commerce**):
 | Prometheus — [http://localhost:9090](http://localhost:9090) | —                   |
 | Kafka UI — [http://localhost:8090](http://localhost:8090)   | —                   |
 
+### Recommended demo workflow
+
+The stack is easiest to validate with **Grafana open on a second monitor** while you drive traffic from the [frontend client](#frontend-client) or the [demo script](#demo-script):
+
+1. Start the backend: `docker compose up -d --build` and wait until all services are healthy (`docker compose ps`).
+2. Open **Grafana → Dashboards → E-Commerce → E-Commerce Stack** (auto-refresh every **5s**).
+3. Trigger purchases — either checkout in **ecom-client** or run `python scripts/demo_script.py`.
+4. Watch metrics move in real time; switch to **Service Logs** when you want the narrative behind a spike or a failed payment.
+
+This triad (UI or script + gateway + Grafana) is how the saga is meant to be explored: HTTP and business counters on the stack dashboard, event flow in Kafka listener panels, compensation in counters and logs — without attaching a debugger.
+
+### What to watch on **E-Commerce Stack**
+
+| Panel | Healthy signal | What changes during a purchase |
+| ----- | -------------- | ------------------------------ |
+| **Services UP** | **7** (all Spring Boot targets) | Drops if a container restarts or fails health checks |
+| **HTTP Request Rate** | Steady baseline; spikes when you browse or checkout | Gateway + user/inventory/review/projection traffic; not order/payment (Kafka-only) |
+| **HTTP 5xx Error Rate** | Near **0** in normal demo flow | Auth/validation issues show as **4xx**, not here; spikes mean a service is throwing |
+| **JVM Heap Used** | Stable sawtooth per service | Brief bumps under load; sustained climb may mean a leak |
+| **Kafka Listener Messages** | Idle until events flow | Rises on `OrderPlaced`, `PaymentProcessed`, `InventoryReleased`, etc. |
+| **DB Pool Connections** | **Total** shows warm HikariCP pools; **active** often **0** when idle | Short active spikes on reserve/pay steps; Kafka workers can look idle between bursts |
+| **Purchase Success / Failure** | Success climbs with each completed checkout | Failure increments when payment simulation rejects (~10% in demo) |
+| **Saga Compensations** | **0** on happy path | Increments when payment fails and inventory is released |
+
+**Tips:** Set the time range to **Last 15 minutes** (dashboard default). If **Service Logs** looks empty, widen to **Last 3 hours** and pick a service from the dropdown — logs are emitted on business events, not continuously.
+
+For raw topic inspection (payloads, consumer groups), use **Kafka UI**; Grafana is for rates, health, and correlated logs.
 
 All Spring services expose `/actuator/prometheus` and **readiness/liveness** probes used by Compose health checks.
 
@@ -288,7 +319,7 @@ cp .env.example .env
 ### 2. Start the full stack
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
 First boot takes **3–5 minutes** (Elasticsearch, Debezium connector registration, service health checks). Watch progress:
@@ -333,11 +364,23 @@ curl -s "http://localhost:8080/api/catalog/products?category=ELECTRONICS" \
 
 ---
 
+## Frontend Client
+
+The backend is API-first, but the easiest way to explore it is the companion web app:
+
+**Repository:** [github.com/tahaberkamcadev/ecom-client](https://github.com/tahaberkamcadev/ecom-client)
+
+After `docker compose up -d --build` in this repo, start the frontend (see its README) and point it at `http://localhost:8080`. You can log in with the seeded demo users, browse the catalog, run checkout quotes, place orders, and watch saga outcomes in Grafana without writing HTTP requests by hand. See [Recommended demo workflow](#recommended-demo-workflow) for which panels to keep open while you click through checkout.
+
+Use the frontend for interactive demos; use the [demo script](#demo-script) or curl when you want scripted load or CI-style smoke tests.
+
+---
+
 
 
 ## Demo Script
 
-A Python client exercises checkout + purchase flows against the gateway (bulk order + several small orders):
+For automated runs (bulk orders, repeatable smoke tests), a Python client exercises checkout + purchase flows against the gateway. Prefer the [ecom-client](https://github.com/tahaberkamcadev/ecom-client) UI for manual exploration.
 
 ```bash
 pip install -r scripts/requirements.txt
@@ -351,7 +394,7 @@ python scripts/demo_script.py --dry-run          # login + catalog only
 python scripts/demo_script.py --skip-bulk        # small orders only
 ```
 
-While the script runs, open **Grafana → E-Commerce Stack** to watch HTTP rates, Kafka activity, saga compensations (~10% payment failure rate), and DB pool metrics update in real time.
+While the script runs, open **Grafana → E-Commerce Stack** (see [What to watch](#what-to-watch-on-e-commerce-stack)) to watch HTTP rates, Kafka activity, saga compensations (~10% payment failure rate), and DB pool metrics update in real time.
 
 ---
 
