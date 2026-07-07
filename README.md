@@ -11,8 +11,6 @@
 
 ---
 
-
-
 ## Table of Contents
 
 - [Why This Project](#why-this-project)
@@ -388,7 +386,7 @@ cd projection-service && ./mvnw test
 cd order-service && ./mvnw test
 ```
 
-The codebase includes **28 unit tests (121 test methods)** covering saga consumers, outbox services, idempotency, catalog controllers, cache DTOs, JWT/auth flows, and core domain logic — with **Mockito**-based isolation (no full stack required for unit tests).
+The codebase includes **35 test classes (121 test methods)** covering saga consumers, outbox services, idempotency, catalog controllers, cache DTOs, JWT/auth flows, and core domain logic — with **Mockito**-based isolation (no full stack required for unit tests).
 
 ---
 
@@ -423,15 +421,97 @@ ecom/
 
 ## Design Decisions
 
-1. **Outbox over dual writes** — guarantees that domain changes and outbound events never diverge.
-2. **Choreography over orchestration** — keeps services autonomous; compensation is event-driven.
-3. **Sync reserve + async saga** — inventory reserve is synchronous (client needs an immediate answer); downstream steps are asynchronous.
-4. **Checkout on write model** — CQRS read paths may lag; checkout reads authoritative inventory prices/stock before purchase.
-5. **Mock payment with failure injection** — ~10% failure rate demonstrates **saga compensation** without external payment APIs.
-6. **Observability as a first-class concern** — metrics, logs, and business counters.
+---
+
+### ADR-001 - Transactional Outbox + Debezium CDC
+
+| | |
+|---|---|
+| **Context** | Publishing to Kafka inside the same request as a DB write creates a **dual-write** risk: one side can succeed and the other fail, leaving services inconsistent. |
+| **Decision** | Persist outbound events in an `outbox_events` table in the **same database transaction** as domain changes. **Debezium** reads the WAL (`pgoutput`) and routes rows to Kafka via the **Outbox Event Router** transform. |
+| **Consequences** | **Pros:** Reliable, atomic write + publish intent; no in-app Kafka producer on the critical path.<br><br>**Cons:** Requires logical replication (`wal_level=logical`) and connector operations; slightly higher end-to-end latency than direct produce. |
 
 ---
 
+### ADR-002 - Choreography Saga (No Central Orchestrator)
+
+| | |
+|---|---|
+| **Context** | A purchase spans inventory, order, payment, and read-model updates. A single distributed transaction (2PC) is brittle across microservices. |
+| **Decision** | Use an **event-driven choreography**: each service reacts to domain events (`stock_updated` -> `order_created` -> `payment_*`) and publishes its own outbox events. **Compensation** on `payment_failed` publishes `order_cancelled` to restore stock. |
+| **Consequences** | **Pros:** Services stay autonomous and deploy independently; flow mirrors real e-commerce boundaries.<br><br>**Cons:** End-to-end tracing requires disciplined logging and metrics; no central saga state table, so reasoning is distributed. |
+
+---
+
+### ADR-003 - Synchronous Stock Reserve, Asynchronous Downstream Steps
+
+| | |
+|---|---|
+| **Context** | The client must know immediately whether stock was reserved; waiting for payment/order projection over Kafka is unacceptable UX. |
+| **Decision** | `POST /api/products/purchase` performs an **atomic SQL stock decrement** (`UPDATE ... WHERE stock >= :qty`) and writes the outbox in one transaction. Order creation, payment, and projections proceed **asynchronously** via Kafka. |
+| **Consequences** | **Pros:** Strong consistency at the decision point the user cares about; optimistic concurrency without application-level locks.<br><br>**Cons:** Client receives `202 Accepted`; final order state is eventually consistent. |
+
+---
+
+### ADR-004 - CQRS with a Pragmatic Exception for Checkout
+
+| | |
+|---|---|
+| **Context** | Catalog browsing should scale on a **read model** (projections, cache, search). But checkout must not show stale prices or phantom stock from a lagging projection. |
+| **Decision** | **Writes** stay in `inventory-service`; **reads** are served by `projection-service` (PostgreSQL + **Redis** + **Elasticsearch**). `POST /api/products/checkout` deliberately hits the **write model** for an authoritative quote right before purchase. |
+| **Consequences** | **Pros:** Fast catalog and search on the read side; no overselling from stale projection data at purchase time.<br><br>**Cons:** Two intentional paths for product data (read vs. write) that must stay documented. |
+
+---
+
+### ADR-005 - Idempotent Consumers (`processed_events`)
+
+| | |
+|---|---|
+| **Context** | Kafka delivers **at-least-once**. Retries and consumer restarts can replay the same event. |
+| **Decision** | Every saga consumer checks `processed_events` with `INSERT ... ON CONFLICT DO NOTHING` before side effects. Duplicates are logged and skipped; processing succeeds idempotently. A scheduled job prunes old rows. |
+| **Consequences** | **Pros:** Safe replays without double-reserving stock or double-creating orders; simple, auditable deduplication per service.<br><br>**Cons:** Per-service table. |
+
+---
+
+### ADR-006 - Kafka Error Handling: Retry, DLT, Manual Ack
+
+| | |
+|---|---|
+| **Context** | Transient failures (DB blips) should retry; poison messages must not block the partition forever. |
+| **Decision** | `DefaultErrorHandler` with **3 retries / 2s backoff**, `DeadLetterPublishingRecoverer` to dedicated **DLT topics**, and `IllegalArgumentException` marked non-retryable. Consumers use **manual acknowledgment** and commit only after successful handling. |
+| **Consequences** | **Pros:** Poison messages land in DLT for inspection; transient errors self-heal via retry.<br><br>**Cons:** DLT topics need operational monitoring (consumed and logged). |
+
+---
+
+### ADR-007 - API Gateway Trust Boundary
+
+| | |
+|---|---|
+| **Context** | Backend services must not trust client-supplied identity headers (`X-User-Id`, `X-User-Role`). |
+| **Decision** | **JWT validation** happens only at `api-gateway`. Valid tokens are translated to internal headers plus a shared `X-Gateway-Secret`. Downstream services reject requests missing the secret. |
+| **Consequences** | **Pros:** Clear security perimeter; business APIs not directly exposed; role-based rules at the edge and in services.<br><br>**Cons:** Shared secret rotation requires coordinated configuration (`.env` or secret manager in production). |
+
+---
+
+### ADR-008 - Mock Payment with Controlled Failure Rate
+
+| | |
+|---|---|
+| **Context** | Integrating a real PSP is out of scope; the project still needs to prove **compensation** works. |
+| **Decision** | `payment-service` simulates processing (~2s delay) with a **~10% random failure**, publishing `payment_failed` or `payment_completed` via outbox. Failures drive the full rollback path (cancel order, restore stock, update projection). |
+| **Consequences** | **Pros:** Demonstrates saga failure handling without external payment dependencies; visible in Grafana via `ecom_saga_compensation_total`.<br><br>**Cons:** Not production payment logic; replace with a PSP adapter in a real deployment. |
+
+---
+
+### ADR-009 - Observability by Default
+
+| | |
+|---|---|
+| **Context** | Distributed systems are hard to debug without correlated metrics and logs. |
+| **Decision** | All services expose `/actuator/prometheus` and readiness probes. **Prometheus** scrapes every instance; **Grafana** ships with stack health dashboards; **Loki + Promtail** aggregate container logs. Business counters (`ecom_purchase_total`, `ecom_saga_compensation_total`) track domain outcomes. |
+| **Consequences** | **Pros:** Single-command local demo is observable end-to-end; behavior verifiable without reading source.<br><br>**Cons:** Full stack needs ~8 GB RAM. |
+
+---
 
 
 ## License
