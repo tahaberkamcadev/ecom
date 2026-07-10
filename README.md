@@ -176,7 +176,7 @@ sequenceDiagram
 | **API edge**           | **Spring Cloud Gateway** (WebMVC), **JWT** (JJWT)                           |
 | **Messaging**          | **Apache Kafka** (KRaft), **Debezium** Outbox Event Router                  |
 | **Databases**          | **PostgreSQL 17** (database-per-service, logical replication enabled)       |
-| **Read model**         | **CQRS** projections, **Redis** cache, **Elasticsearch 9** full-text search |
+| **Read model**         | **CQRS** — precomputed projection DB, **Redis** cache, **Elasticsearch 9** search |
 | **Observability**      | **Micrometer**, **Prometheus**, **Grafana**, **Loki**, **Promtail**         |
 | **Packaging**          | **Docker**, **Docker Compose**, multi-stage Dockerfiles, readiness probes   |
 | **Testing**            | JUnit 5, Mockito, AssertJ, `@WebMvcTest`, service-layer unit tests          |
@@ -198,7 +198,7 @@ sequenceDiagram
 | **order-service**      | 8083 | Order aggregate, saga reactions, compensation           | PostgreSQL + Outbox     |
 | **payment-service**    | 8084 | Mock payment processor, saga participant                | PostgreSQL + Outbox     |
 | **review-service**     | 8086 | Product reviews, review-created events                  | PostgreSQL + Outbox     |
-| **projection-service** | 8087 | Catalog & order **read API**, search, cache             | PostgreSQL + Redis + ES |
+| **projection-service** | 8087 | Catalog & order **read API** over a **precomputed** projection DB, Redis cache, ES search | PostgreSQL + Redis + ES |
 
 
 **Supporting infrastructure (Docker Compose):** 6× PostgreSQL, Kafka, Kafka UI, Debezium Connect, Prometheus, Grafana, Loki, Promtail, Redis, Elasticsearch.
@@ -234,7 +234,7 @@ sequenceDiagram
 ### Data & consistency
 
 - **Database-per-service** — no shared tables across bounded contexts.
-- **CQRS** — writes in inventory/order/payment; reads served from projection-service.
+- **CQRS / precomputed read model** — write services own their transactional stores; Kafka events materialize **denormalized** product, review, and order views into `projection-service`'s PostgreSQL. Catalog and order **reads** hit that query-shaped store (plus Redis / Elasticsearch) instead of joining across write databases — so browse/search stay fast and independent of write-path load. The trade-off is **eventual consistency** until projections catch up.
 - **Eventual consistency** on catalog/search; **strong consistency** on purchase via synchronous inventory reserve.
 
 ---
@@ -500,9 +500,9 @@ ecom/
 
 | | |
 |---|---|
-| **Context** | Catalog browsing should scale on a **read model** (projections, cache, search). But checkout must not show stale prices or phantom stock from a lagging projection. |
-| **Decision** | **Writes** stay in `inventory-service`; **reads** are served by `projection-service` (PostgreSQL + **Redis** + **Elasticsearch**). `POST /api/products/checkout` deliberately hits the **write model** for an authoritative quote right before purchase. |
-| **Consequences** | **Pros:** Fast catalog and search on the read side; no overselling from stale projection data at purchase time.<br><br>**Cons:** Two intentional paths for product data (read vs. write) that must stay documented. |
+| **Context** | Catalog browsing and search must stay fast under load. Serving those queries from write databases would force cross-service joins, contend with transactional traffic, and couple read latency to inventory/order write paths. Checkout, however, must not show stale prices or phantom stock from a lagging projection. |
+| **Decision** | **Writes** stay in `inventory-service` (and other write services). Domain events update a dedicated **projection database** in `projection-service`: **precomputed, denormalized** product/order/review views shaped for read APIs. Hot paths add **Redis** caching; full-text search uses **Elasticsearch**. `POST /api/products/checkout` deliberately hits the **write model** for an authoritative quote right before purchase. |
+| **Consequences** | **Pros:** Optimized reads without touching write DBs; catalog/search scale independently; no overselling from stale projection data at purchase time.<br><br>**Cons:** Two intentional paths for product data (read vs. write); projection lag is visible until consumers catch up — must stay documented. |
 
 ---
 
