@@ -128,18 +128,24 @@ sequenceDiagram
 
   C->>GW: POST /api/products/purchase
   GW->>INV: reserve stock (sync, strong consistency)
-  INV->>DB: UPDATE stock + outbox (single TX)
-  DB-->>K: Debezium publishes stock_updated
-  K->>ORD: create order + order_created outbox
-  K->>PRJ: update read model
-  K->>PAY: process payment (~90% success)
-  alt payment completed
+  INV->>DB: UPDATE stock + outbox stock_updated (single TX)
+  DB-->>K: Debezium → saga.inventory.stock_updated
+  par consumers of stock_updated
+    K->>ORD: create order + outbox order_created
+    K->>PRJ: create order projection (PROCESSING)
+  end
+  DB-->>K: Debezium → saga.order.order_created
+  K->>PAY: mock payment (~2s, ~90% success)
+  alt payment_completed
+    DB-->>K: Debezium → saga.payment.payment_completed
     K->>ORD: mark DELIVERED
     K->>PRJ: mark DELIVERED
-  else payment failed
-    K->>ORD: cancel order + order_cancelled
-    K->>INV: restore stock (compensation)
+  else payment_failed
+    DB-->>K: Debezium → saga.payment.payment_failed
+    K->>ORD: mark CANCELLED + outbox order_cancelled
     K->>PRJ: mark CANCELLED
+    DB-->>K: Debezium → saga.order.order_cancelled
+    K->>INV: restore stock (compensation)
   end
 ```
 
@@ -162,7 +168,7 @@ sequenceDiagram
 | Layer                  | Technologies                                                                |
 | ---------------------- | --------------------------------------------------------------------------- |
 | **Language & runtime** | **Java 21**, Maven                                                          |
-| **Framework**          | **Spring Boot 4.0.4**, Spring Data JPA, Spring Security, Spring Kafka       |
+| **Framework**          | **Spring Boot 4**, Spring Data JPA, Spring Security, Spring Kafka           |
 | **API edge**           | **Spring Cloud Gateway** (WebMVC), **JWT** (JJWT)                           |
 | **Messaging**          | **Apache Kafka** (KRaft), **Debezium** Outbox Event Router                  |
 | **Databases**          | **PostgreSQL 17** (database-per-service, logical replication enabled)       |
@@ -271,10 +277,10 @@ This triad (UI or script + gateway + Grafana) is how the saga is meant to be exp
 | **HTTP Request Rate** | Steady baseline; spikes when you browse or checkout | Gateway + user/inventory/review/projection traffic; not order/payment (Kafka-only) |
 | **HTTP 5xx Error Rate** | Near **0** in normal demo flow | Auth/validation issues show as **4xx**, not here; spikes mean a service is throwing |
 | **JVM Heap Used** | Stable sawtooth per service | Brief bumps under load; sustained climb may mean a leak |
-| **Kafka Listener Messages** | Idle until events flow | Rises on `OrderPlaced`, `PaymentProcessed`, `InventoryReleased`, etc. |
+| **Kafka Listener Activity** | Idle until events flow | Rises on `stock_updated`, `order_created`, `payment_completed` / `payment_failed`, `order_cancelled`, etc. |
 | **DB Pool Connections** | **Total** shows warm HikariCP pools; **active** often **0** when idle | Short active spikes on reserve/pay steps; Kafka workers can look idle between bursts |
-| **Purchase Success / Failure** | Success climbs with each completed checkout | Failure increments when payment simulation rejects (~10% in demo) |
-| **Saga Compensations** | **0** on happy path | Increments when payment fails and inventory is released |
+| **Purchases Started** | Climbs on each successful stock reserve | `ecom_purchase_total` — counted when inventory accepts the purchase request, **before** payment completes |
+| **Saga Compensations** | **0** on happy path | `ecom_saga_compensation_total` — increments when mock payment fails (~10%) and the order is cancelled / stock restored |
 
 **Tips:** Set the time range to **Last 15 minutes** (dashboard default). If **Service Logs** looks empty, widen to **Last 3 hours** and pick a service from the dropdown — logs are emitted on business events, not continuously.
 
