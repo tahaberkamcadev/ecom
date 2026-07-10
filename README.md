@@ -57,17 +57,7 @@ The stack is intentionally **over-instrumented for a portfolio project** so revi
 
 ## Architecture at a Glance
 
-```
-Web UI (ecom-client) or API clients ──► API Gateway (JWT) ──► user-service | inventory-service | review-service | projection-service
-                                      │                │
-                                      │                └── synchronous stock reserve (write path)
-                                      │
-Kafka ◄── Debezium Outbox ◄── PostgreSQL (per service)
-  │
-  ├── order-service      (saga: create / cancel order)
-  ├── payment-service    (saga: mock payment + compensation trigger)
-  └── projection-service (CQRS read model + Elasticsearch search + Redis cache)
-```
+![Runtime Architecture (Docker Compose)](screenshots/diagram0.png)
 
 ```mermaid
 flowchart LR
@@ -271,6 +261,8 @@ The stack is easiest to validate with **Grafana open on a second monitor** while
 
 This triad (UI or script + gateway + Grafana) is how the saga is meant to be explored: HTTP and business counters on the stack dashboard, event flow in Kafka listener panels, compensation in counters and logs — without attaching a debugger.
 
+![Grafana — E-Commerce Stack dashboard](screenshots/grafana0.png)
+
 ### What to watch on **E-Commerce Stack**
 
 | Panel | Healthy signal | What changes during a purchase |
@@ -285,6 +277,8 @@ This triad (UI or script + gateway + Grafana) is how the saga is meant to be exp
 | **Saga Compensations** | **0** on happy path | Increments when payment fails and inventory is released |
 
 **Tips:** Set the time range to **Last 15 minutes** (dashboard default). If **Service Logs** looks empty, widen to **Last 3 hours** and pick a service from the dropdown — logs are emitted on business events, not continuously.
+
+![Grafana — Service Logs (Loki) dashboard](screenshots/grafana1.png)
 
 For raw topic inspection (payloads, consumer groups), use **Kafka UI**; Grafana is for rates, health, and correlated logs.
 
