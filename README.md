@@ -4,12 +4,12 @@
 
 **Frontend (separate repo):** [ecom-client](https://github.com/tahaberkamcadev/ecom-client) — web UI for browsing the catalog, checkout, and purchase flows against this backend. The fastest way to exercise the stack without curl or scripts.
 
-[Java](https://openjdk.org/)
-[Spring Boot](https://spring.io/projects/spring-boot)
-[Kafka](https://kafka.apache.org/)
-[PostgreSQL](https://www.postgresql.org/)
-[Docker](https://docs.docker.com/compose/)
-[License: MIT](LICENSE)
+[![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)](https://openjdk.org/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![Kafka](https://img.shields.io/badge/Apache%20Kafka-KRaft-231F20?logo=apachekafka&logoColor=white)](https://kafka.apache.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
@@ -60,50 +60,73 @@ The stack is intentionally **over-instrumented for a portfolio project** so revi
 ![Runtime Architecture (Docker Compose)](screenshots/diagram0.png)
 
 ```mermaid
-flowchart LR
+flowchart TB
+  CLIENT["Clients<br/>ecom-client · curl · demo script"]
+
   subgraph edge["Edge"]
-    GW["API Gateway<br/>JWT + routing"]
+    GW["api-gateway :8080<br/>JWT · CORS · routing"]
   end
 
-  subgraph write["Write / Saga"]
-    INV["inventory-service"]
-    ORD["order-service"]
-    PAY["payment-service"]
+  subgraph http["HTTP via gateway"]
+    USER["user-service :8081<br/>auth · JWT issue"]
+    INV["inventory-service :8082<br/>catalog write · purchase"]
+    REV["review-service :8086<br/>reviews"]
+    PRJ["projection-service :8087<br/>CQRS read API"]
   end
 
-  subgraph read["Read / CQRS"]
-    PRJ["projection-service"]
+  subgraph saga["Kafka-only saga participants"]
+    ORD["order-service<br/>order aggregate"]
+    PAY["payment-service<br/>mock payment"]
+  end
+
+  subgraph readstore["Read-side stores"]
     ES["Elasticsearch"]
     RD["Redis"]
   end
 
-  subgraph infra["Platform"]
-    K["Kafka"]
-    DB["PostgreSQL x6"]
-    DEB["Debezium Connect"]
-    PROM["Prometheus"]
-    GRAF["Grafana"]
-    LOKI["Loki + Promtail"]
+  subgraph data["Data & messaging"]
+    DB["PostgreSQL ×6<br/>database-per-service"]
+    DEB["Debezium Connect<br/>outbox → Kafka"]
+    K["Kafka KRaft"]
   end
 
+  subgraph obs["Observability"]
+    PROM["Prometheus"]
+    LOKI["Loki + Promtail"]
+    GRAF["Grafana"]
+  end
+
+  CLIENT --> GW
+  GW --> USER
   GW --> INV
+  GW --> REV
   GW --> PRJ
+
+  USER --> DB
   INV --> DB
   ORD --> DB
   PAY --> DB
-  INV --> DEB
-  ORD --> DEB
-  PAY --> DEB
-  DEB --> K
-  K --> ORD
-  K --> PAY
-  K --> PRJ
+  REV --> DB
   PRJ --> DB
   PRJ --> ES
   PRJ --> RD
-  PROM --> GRAF
-  LOKI --> GRAF
+
+  INV --> DEB
+  ORD --> DEB
+  PAY --> DEB
+  REV --> DEB
+  DEB --> K
+
+  K --> ORD
+  K --> PAY
+  K --> PRJ
+  K --> INV
+
+  PROM -.-> GRAF
+  LOKI -.-> GRAF
 ```
+
+Gateway exposes auth, products, reviews, and catalog. **order-service** and **payment-service** have no public HTTP routes — they only consume/produce saga events on Kafka.
 
 
 
@@ -197,6 +220,8 @@ sequenceDiagram
 | **projection-service** | 8087 | Catalog & order **read API** over a **precomputed** projection DB, Redis cache, ES search | PostgreSQL + Redis + ES |
 
 
+Published host ports above are for local inspection; the intended client entry point is still **api-gateway :8080**. `order-service` / `payment-service` are not published to the host.
+
 **Supporting infrastructure (Docker Compose):** 6× PostgreSQL, Kafka, Kafka UI, Debezium Connect, Prometheus, Grafana, Loki, Promtail, Redis, Elasticsearch.
 
 ---
@@ -221,7 +246,7 @@ sequenceDiagram
 ### Security
 
 - **JWT authentication** at the API Gateway; downstream services trust gateway-injected identity headers.
-- **Shared gateway secret** (`X-Gateway-Secret`) on internal/service-to-service calls — backend endpoints reject direct unauthenticated access.
+- **Shared gateway secret** (`X-Gateway-Secret`) — inventory, review, and projection reject requests without it; user-service requires it on `/api/v1/internal/**`. Clients should use the gateway (`:8080`); host-mapped backend ports are for **local debugging**, not a production exposure model.
 - **Role-based access** (e.g. admin-only product creation).
 - **Fail-closed** security configuration on protected routes.
 
@@ -405,16 +430,20 @@ While the script runs, open **Grafana → E-Commerce Stack** (see [What to watch
 All external traffic goes through the **API Gateway** (`localhost:8080`):
 
 
-| Path prefix        | Service            | Examples                                                        |
-| ------------------ | ------------------ | --------------------------------------------------------------- |
-| `/api/v1/auth/**`  | user-service       | `POST /api/v1/auth/login`, `POST /api/v1/auth/register`         |
-| `/api/v1/users/**` | user-service       | Profile, password change                                        |
-| `/api/products/**` | inventory-service  | `POST /api/products/purchase`, `POST /api/products/checkout`    |
-| `/api/reviews/**`  | review-service     | `POST /api/reviews`                                             |
-| `/api/catalog/**`  | projection-service | `GET /api/catalog/products`, `GET /api/catalog/products/search` |
+| Path prefix | Service | Examples |
+| ----------- | ------- | -------- |
+| `/api/v1/auth/**` | user-service | `POST /api/v1/auth/login`, `POST /api/v1/auth/register` (**public**) |
+| `/api/v1/users/**` | user-service | `GET /api/v1/users/me`, `PUT /api/v1/users/me`, `PUT /api/v1/users/me/password` |
+| `/api/products/**` | inventory-service | `POST /api/products/checkout`, `POST /api/products/purchase`, `POST /api/products` (admin create) |
+| `/api/reviews/**` | review-service | `POST /api/reviews` |
+| `/api/catalog/products/**` | projection-service | `GET /api/catalog/products` (**public** list/detail/search), `GET .../search`, `GET .../{id}`, `GET .../{id}/reviews` |
+| `/api/catalog/orders/**` | projection-service | `GET /api/catalog/orders`, `GET /api/catalog/orders/{orderId}` (JWT required) |
 
+
+**Auth notes:** `GET /api/catalog/products/**` and `/api/v1/auth/**` are public at the gateway. Other catalog/order and write endpoints expect `Authorization: Bearer <access_token>`.
 
 **Saga participants** (`order-service`, `payment-service`) are intentionally **not** exposed via the gateway — they communicate through **Kafka events** only.
+
 
 ---
 
@@ -531,8 +560,8 @@ ecom/
 | | |
 |---|---|
 | **Context** | Backend services must not trust client-supplied identity headers (`X-User-Id`, `X-User-Role`). |
-| **Decision** | **JWT validation** happens only at `api-gateway`. Valid tokens are translated to internal headers plus a shared `X-Gateway-Secret`. Downstream services reject requests missing the secret. |
-| **Consequences** | **Pros:** Clear security perimeter; business APIs not directly exposed; role-based rules at the edge and in services.<br><br>**Cons:** Shared secret rotation requires coordinated configuration (`.env` or secret manager in production). |
+| **Decision** | **JWT validation** happens only at `api-gateway`. Valid tokens are translated to internal headers plus a shared `X-Gateway-Secret`. Downstream services that accept browser/API traffic reject requests missing the secret (user-service applies this to `/api/v1/internal/**`). |
+| **Consequences** | **Pros:** Clear **application-level** perimeter; identity headers cannot be spoofed without the shared secret; role-based rules at the edge and in services.<br><br>**Cons:** Shared secret rotation needs coordinated config. In local Compose, some backend ports are still published for debugging — that is convenience, not the production model (there, only the gateway/ingress should be reachable). |
 
 ---
 

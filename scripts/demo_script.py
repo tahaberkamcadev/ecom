@@ -4,8 +4,8 @@ Requirements:
   docker compose up -d --build
 
 Usage:
-  python scripts/bulk_purchase_demo.py
-  python scripts/bulk_purchase_demo.py --dry-run
+  python scripts/demo_script.py
+  python scripts/demo_script.py --dry-run
 """
 
 from __future__ import annotations
