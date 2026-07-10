@@ -22,8 +22,6 @@ GATEWAY = "http://localhost:8080"
 ADMIN_EMAIL = "admin@demo.local"
 ADMIN_PASSWORD = "DemoAdmin1!"
 
-CATEGORIES = ["ELECTRONICS", "CLOTHING", "HOME", "BOOKS", "SPORTS", "BEAUTY"]
-
 
 BULK_ORDER = [
     ("Wireless Headphones", 8),
@@ -74,18 +72,26 @@ class EcomClient:
         print(f"Giriş OK: {email}")
 
     def load_catalog(self) -> dict[str, str]:
-        """Product name → productId map."""
+        """Product name → productId map (Postgres catalog list, all categories)."""
         catalog: dict[str, str] = {}
+        page = 0
+        size = 100
 
-        for category in CATEGORIES:
+        while True:
             response = self.http.get(
                 f"{self.base_url}/api/catalog/products",
-                params={"category": category},
+                params={"page": page, "size": size},
                 timeout=30,
             )
             response.raise_for_status()
-            for product in response.json():
+            payload = response.json()
+            for product in payload.get("items", []):
                 catalog[product["name"]] = product["productId"]
+
+            total = int(payload.get("total", 0))
+            page += 1
+            if page * size >= total or not payload.get("items"):
+                break
 
         if not catalog:
             raise RuntimeError("Catalog is empty. Is the stack running? Is the projection syncing?")

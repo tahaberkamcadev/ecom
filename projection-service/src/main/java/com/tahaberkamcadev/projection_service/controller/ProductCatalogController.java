@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.tahaberkamcadev.projection_service.dto.response.ProductDetailResponse;
 import com.tahaberkamcadev.projection_service.dto.response.ProductSearchPageResponse;
-import com.tahaberkamcadev.projection_service.dto.response.ProductSummaryResponse;
 import com.tahaberkamcadev.projection_service.dto.response.ProductReviewResponse;
 import com.tahaberkamcadev.projection_service.dto.response.ReviewPageResponse;
 import com.tahaberkamcadev.projection_service.entity.ProductView;
@@ -33,13 +32,12 @@ public class ProductCatalogController {
     private final CatalogMapper catalogMapper;
 
     @GetMapping
-    public ResponseEntity<List<ProductSummaryResponse>> listProducts(
-            @RequestParam ProductCategory category
+    public ResponseEntity<ProductSearchPageResponse> listProducts(
+            @RequestParam(required = false) ProductCategory category,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
     ) {
-        List<ProductSummaryResponse> products = productQueryService.findByCategoryAndActive(category, true).stream()
-                .map(catalogMapper::toSummary)
-                .toList();
-        return ResponseEntity.ok(products);
+        return ResponseEntity.ok(productQueryService.listProducts(category, true, page, size));
     }
 
     @GetMapping("/search")

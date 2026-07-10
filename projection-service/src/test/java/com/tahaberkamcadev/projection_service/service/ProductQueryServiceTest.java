@@ -83,6 +83,71 @@ class ProductQueryServiceTest {
     }
 
     @Test
+    void listProducts_shouldReturnAllActiveWhenCategoryNull() {
+        ProductView product = ProductView.builder()
+                .productId(UUID.randomUUID())
+                .category(ProductCategory.HOME)
+                .name("Mug")
+                .brand("IKEA")
+                .price(new BigDecimal("12.99"))
+                .inStock(true)
+                .active(true)
+                .averageRating(new BigDecimal("3.50"))
+                .reviewCount(1)
+                .createdAt(Instant.now())
+                .updatedAt(Instant.now())
+                .build();
+        Page<ProductView> page = new PageImpl<>(List.of(product), PageRequest.of(0, 20), 1);
+
+        when(productViewRepository.findByActiveOrderByNameAsc(true, PageRequest.of(0, 20)))
+                .thenReturn(page);
+
+        ProductSearchPageResponse result = productQueryService.listProducts(null, true, 0, 20);
+
+        assertThat(result.total()).isEqualTo(1);
+        assertThat(result.page()).isEqualTo(0);
+        assertThat(result.size()).isEqualTo(20);
+        assertThat(result.items()).hasSize(1);
+        assertThat(result.items().getFirst().name()).isEqualTo("Mug");
+        assertThat(result.items().getFirst().category()).isEqualTo(ProductCategory.HOME);
+    }
+
+    @Test
+    void listProducts_shouldFilterByCategory() {
+        ProductView product = ProductView.builder()
+                .productId(UUID.randomUUID())
+                .category(ProductCategory.ELECTRONICS)
+                .name("Phone")
+                .brand("Acme")
+                .price(new BigDecimal("999.00"))
+                .inStock(true)
+                .active(true)
+                .averageRating(new BigDecimal("4.50"))
+                .reviewCount(2)
+                .createdAt(Instant.now())
+                .updatedAt(Instant.now())
+                .build();
+        Page<ProductView> page = new PageImpl<>(List.of(product), PageRequest.of(0, 10), 1);
+
+        when(productViewRepository.findByCategoryAndActiveOrderByNameAsc(
+                ProductCategory.ELECTRONICS, true, PageRequest.of(0, 10)))
+                .thenReturn(page);
+
+        ProductSearchPageResponse result = productQueryService.listProducts(
+                ProductCategory.ELECTRONICS, true, 0, 10);
+
+        assertThat(result.total()).isEqualTo(1);
+        assertThat(result.items().getFirst().category()).isEqualTo(ProductCategory.ELECTRONICS);
+    }
+
+    @Test
+    void listProducts_shouldRejectInvalidPageSize() {
+        assertThatThrownBy(() -> productQueryService.listProducts(null, true, 0, 101))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("size must be between 1 and 100");
+    }
+
+    @Test
     void searchProducts_shouldDelegateToSearchService() {
         ProductSearchPageResponse page = new ProductSearchPageResponse(List.of(), 0, 0, 20);
         when(productSearchService.getIfAvailable()).thenReturn(productSearchServiceInstance);

@@ -64,7 +64,7 @@ flowchart TB
   CLIENT["Clients<br/>ecom-client · curl · demo script"]
 
   subgraph edge["Edge"]
-    GW["api-gateway :8080<br/>JWT · CORS · routing"]
+    GW["api-gateway :8080<br/>JWT · rate limit · CORS · routing"]
   end
 
   subgraph http["HTTP via gateway"]
@@ -192,7 +192,7 @@ sequenceDiagram
 | ---------------------- | --------------------------------------------------------------------------- |
 | **Language & runtime** | **Java 21**, Maven                                                          |
 | **Framework**          | **Spring Boot 4**, Spring Data JPA, Spring Security, Spring Kafka           |
-| **API edge**           | **Spring Cloud Gateway** (WebMVC), **JWT** (JJWT)                           |
+| **API edge**           | **Spring Cloud Gateway** (WebMVC), **JWT** (JJWT), in-memory **rate limiting** |
 | **Messaging**          | **Apache Kafka** (KRaft), **Debezium** Outbox Event Router                  |
 | **Databases**          | **PostgreSQL 17** (database-per-service, logical replication enabled)       |
 | **Read model**         | **CQRS** — precomputed projection DB, **Redis** cache, **Elasticsearch 9** search |
@@ -211,7 +211,7 @@ sequenceDiagram
 
 | Service                | Port | Role                                                    | Persistence             |
 | ---------------------- | ---- | ------------------------------------------------------- | ----------------------- |
-| **api-gateway**        | 8080 | Single entry point, JWT validation, route proxying      | —                       |
+| **api-gateway**        | 8080 | Single entry point, JWT validation, rate limiting, route proxying | —                       |
 | **user-service**       | 8081 | Registration, login, JWT issuance, profile              | PostgreSQL              |
 | **inventory-service**  | 8082 | Product catalog (write), checkout, purchase, stock saga | PostgreSQL + Outbox     |
 | **order-service**      | 8083 | Order aggregate, saga reactions, compensation           | PostgreSQL + Outbox     |
@@ -246,6 +246,7 @@ Published host ports above are for local inspection; the intended client entry p
 ### Security
 
 - **JWT authentication** at the API Gateway; downstream services trust gateway-injected identity headers.
+- **In-memory rate limiting** at the gateway (per client IP): stricter on `/api/v1/auth/**`, higher default for other API traffic; `/actuator/**` excluded. Sufficient for a single gateway instance — swap to Redis-backed counters before horizontal scale.
 - **Shared gateway secret** (`X-Gateway-Secret`) — inventory, review, and projection reject requests without it; user-service requires it on `/api/v1/internal/**`. Clients should use the gateway (`:8080`); host-mapped backend ports are for **local debugging**, not a production exposure model.
 - **Role-based access** (e.g. admin-only product creation).
 - **Fail-closed** security configuration on protected routes.
@@ -382,10 +383,23 @@ Use the returned `access_token` as `Authorization: Bearer <token>` on subsequent
 
 ### 5. Browse the catalog
 
+List active products from the **Postgres** read model (`category` optional; response is paginated):
+
 ```bash
-curl -s "http://localhost:8080/api/catalog/products?category=ELECTRONICS" \
-  -H "Authorization: Bearer <token>"
+# All products
+curl -s "http://localhost:8080/api/catalog/products?page=0&size=20"
+
+# Filter by category
+curl -s "http://localhost:8080/api/catalog/products?category=ELECTRONICS&page=0&size=20"
 ```
+
+Full-text search still goes through **Elasticsearch**:
+
+```bash
+curl -s "http://localhost:8080/api/catalog/products/search?q=Monitor&page=0&size=20"
+```
+
+Both return `{ "items": [...], "total": N, "page": 0, "size": 20 }`. Catalog product GETs are **public** (Bearer optional).
 
 ---
 
@@ -436,7 +450,7 @@ All external traffic goes through the **API Gateway** (`localhost:8080`):
 | `/api/v1/users/**` | user-service | `GET /api/v1/users/me`, `PUT /api/v1/users/me`, `PUT /api/v1/users/me/password` |
 | `/api/products/**` | inventory-service | `POST /api/products/checkout`, `POST /api/products/purchase`, `POST /api/products` (admin create) |
 | `/api/reviews/**` | review-service | `POST /api/reviews` |
-| `/api/catalog/products/**` | projection-service | `GET /api/catalog/products` (**public** list/detail/search), `GET .../search`, `GET .../{id}`, `GET .../{id}/reviews` |
+| `/api/catalog/products/**` | projection-service | `GET /api/catalog/products` (**public** Postgres list; optional `category`, `page`, `size` → `{items,total,page,size}`), `GET .../search` (ES; optional `q`/`category`), `GET .../{id}`, `GET .../{id}/reviews` |
 | `/api/catalog/orders/**` | projection-service | `GET /api/catalog/orders`, `GET /api/catalog/orders/{orderId}` (JWT required) |
 
 
@@ -468,7 +482,7 @@ The codebase includes **35 test classes (121 test methods)** covering saga consu
 
 ```
 ecom/
-├── api-gateway/           # Spring Cloud Gateway, JWT filter
+├── api-gateway/           # Spring Cloud Gateway, JWT filter, rate limiting
 ├── user-service/          # Auth & identity
 ├── inventory-service/     # Catalog write, purchase, stock saga
 ├── order-service/         # Order aggregate & saga reactions

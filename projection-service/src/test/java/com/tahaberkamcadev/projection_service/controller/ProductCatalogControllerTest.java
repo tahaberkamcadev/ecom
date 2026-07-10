@@ -1,6 +1,5 @@
 package com.tahaberkamcadev.projection_service.controller;
 
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -44,42 +43,57 @@ class ProductCatalogControllerTest {
     private CatalogMapper catalogMapper;
 
     @Test
-    void listProducts_returnsCatalogSummaries() throws Exception {
-        ProductView productView = ProductView.builder()
-                .productId(UUID.randomUUID())
-                .category(ProductCategory.ELECTRONICS)
-                .name("Phone")
-                .brand("Acme")
-                .price(new BigDecimal("999.00"))
-                .inStock(true)
-                .active(true)
-                .averageRating(new BigDecimal("4.50"))
-                .reviewCount(2)
-                .createdAt(Instant.now())
-                .updatedAt(Instant.now())
-                .build();
-
+    void listProducts_returnsPagedCatalogWithoutCategory() throws Exception {
+        UUID productId = UUID.randomUUID();
         ProductSummaryResponse summary = new ProductSummaryResponse(
-                productView.getProductId(),
-                productView.getCategory(),
-                productView.getName(),
-                productView.getBrand(),
-                productView.getPrice(),
-                productView.isInStock(),
-                productView.getAverageRating(),
-                productView.getReviewCount()
+                productId,
+                ProductCategory.ELECTRONICS,
+                "Phone",
+                "Acme",
+                new BigDecimal("999.00"),
+                true,
+                new BigDecimal("4.50"),
+                2
         );
+        ProductSearchPageResponse page = new ProductSearchPageResponse(List.of(summary), 1, 0, 20);
 
-        when(productQueryService.findByCategoryAndActive(eq(ProductCategory.ELECTRONICS), eq(true)))
-                .thenReturn(List.of(productView));
-        when(catalogMapper.toSummary(productView)).thenReturn(summary);
+        when(productQueryService.listProducts(null, true, 0, 20)).thenReturn(page);
 
         mockMvc.perform(get("/api/catalog/products")
-                        .param("category", "ELECTRONICS")
+                        .param("page", "0")
+                        .param("size", "20")
                         .header("X-Gateway-Secret", GATEWAY_SECRET))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].name").value("Phone"))
-                .andExpect(jsonPath("$[0].category").value("ELECTRONICS"));
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.items[0].name").value("Phone"))
+                .andExpect(jsonPath("$.items[0].category").value("ELECTRONICS"));
+    }
+
+    @Test
+    void listProducts_filtersByCategoryWhenProvided() throws Exception {
+        UUID productId = UUID.randomUUID();
+        ProductSummaryResponse summary = new ProductSummaryResponse(
+                productId,
+                ProductCategory.BOOKS,
+                "Clean Code",
+                "Prentice Hall",
+                new BigDecimal("39.99"),
+                true,
+                new BigDecimal("4.80"),
+                10
+        );
+        ProductSearchPageResponse page = new ProductSearchPageResponse(List.of(summary), 1, 0, 20);
+
+        when(productQueryService.listProducts(ProductCategory.BOOKS, true, 0, 20)).thenReturn(page);
+
+        mockMvc.perform(get("/api/catalog/products")
+                        .param("category", "BOOKS")
+                        .header("X-Gateway-Secret", GATEWAY_SECRET))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].name").value("Clean Code"))
+                .andExpect(jsonPath("$.items[0].category").value("BOOKS"));
     }
 
     @Test
