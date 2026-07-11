@@ -385,6 +385,16 @@ services:
       timeout: 5s
       retries: 10
 
+  redis-gateway:
+    image: 'redis:7-alpine'
+    ports:
+      - '6380:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   elasticsearch-projection:
     image: 'docker.elastic.co/elasticsearch/elasticsearch:9.0.0'
     environment:
@@ -439,6 +449,8 @@ services:
       context: ./api-gateway
       dockerfile: Dockerfile
     depends_on:
+      redis-gateway:
+        condition: service_healthy
       user-service:
         condition: service_healthy
       inventory-service:
@@ -455,6 +467,9 @@ services:
       INVENTORY_SERVICE_URL: 'http://inventory-service:8082'
       REVIEW_SERVICE_URL: 'http://review-service:8086'
       PROJECTION_SERVICE_URL: 'http://projection-service:8087'
+      SPRING_DATA_REDIS_HOST: redis-gateway
+      SPRING_DATA_REDIS_PORT: 6379
+      RATE_LIMIT_BACKEND: redis
       JWT_SECRET: ${JWT_SECRET}
       GATEWAY_SECRET: ${GATEWAY_SECRET}
     healthcheck:

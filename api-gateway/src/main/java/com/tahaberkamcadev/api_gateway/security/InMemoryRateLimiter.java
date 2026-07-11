@@ -1,19 +1,22 @@
 package com.tahaberkamcadev.api_gateway.security;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Fixed-window rate limiter. Sufficient for a single gateway instance;
- * replace with Redis-backed counters when scaling horizontally.
+ * Process-local fixed-window limiter for tests / local fallback when
+ * {@code app.rate-limit.backend=memory}.
  */
 @Component
-public class InMemoryRateLimiter {
+@ConditionalOnProperty(name = "app.rate-limit.backend", havingValue = "memory")
+public class InMemoryRateLimiter implements RateLimiter {
 
     private final ConcurrentHashMap<String, WindowCounter> counters = new ConcurrentHashMap<>();
 
+    @Override
     public boolean tryAcquire(String key, int limit, long windowMillis) {
         long now = System.currentTimeMillis();
 
@@ -25,10 +28,6 @@ public class InMemoryRateLimiter {
         });
 
         return counter.count.incrementAndGet() <= limit;
-    }
-
-    int size() {
-        return counters.size();
     }
 
     private static final class WindowCounter {

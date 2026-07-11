@@ -64,7 +64,7 @@ flowchart TB
   CLIENT["Clients<br/>ecom-client · curl · demo script"]
 
   subgraph edge["Edge"]
-    GW["api-gateway :8080<br/>JWT · rate limit · CORS · routing"]
+    GW["api-gateway :8080<br/>JWT · Redis rate limit · CORS · routing"]
   end
 
   subgraph http["HTTP via gateway"]
@@ -79,9 +79,10 @@ flowchart TB
     PAY["payment-service<br/>mock payment"]
   end
 
-  subgraph readstore["Read-side stores"]
+  subgraph readstore["Read-side & edge stores"]
     ES["Elasticsearch"]
-    RD["Redis"]
+    RD["redis-projection<br/>detail cache"]
+    RDG["redis-gateway<br/>rate-limit counters"]
   end
 
   subgraph data["Data & messaging"]
@@ -101,6 +102,7 @@ flowchart TB
   GW --> INV
   GW --> REV
   GW --> PRJ
+  GW --> RDG
 
   USER --> DB
   INV --> DB
@@ -192,7 +194,7 @@ sequenceDiagram
 | ---------------------- | --------------------------------------------------------------------------- |
 | **Language & runtime** | **Java 21**, Maven                                                          |
 | **Framework**          | **Spring Boot 4**, Spring Data JPA, Spring Security, Spring Kafka           |
-| **API edge**           | **Spring Cloud Gateway** (WebMVC), **JWT** (JJWT), in-memory **rate limiting** |
+| **API edge**           | **Spring Cloud Gateway** (WebMVC), **JWT** (JJWT), **Redis**-backed **rate limiting** |
 | **Messaging**          | **Apache Kafka** (KRaft), **Debezium** Outbox Event Router                  |
 | **Databases**          | **PostgreSQL 17** (database-per-service, logical replication enabled)       |
 | **Read model**         | **CQRS** — precomputed projection DB, **Redis** cache, **Elasticsearch 9** search |
@@ -211,7 +213,7 @@ sequenceDiagram
 
 | Service                | Port | Role                                                    | Persistence             |
 | ---------------------- | ---- | ------------------------------------------------------- | ----------------------- |
-| **api-gateway**        | 8080 | Single entry point, JWT validation, rate limiting, route proxying | —                       |
+| **api-gateway**        | 8080 | Single entry point, JWT validation, Redis rate limiting, route proxying | Redis (rate-limit counters) |
 | **user-service**       | 8081 | Registration, login, JWT issuance, profile              | PostgreSQL              |
 | **inventory-service**  | 8082 | Product catalog (write), checkout, purchase, stock saga | PostgreSQL + Outbox     |
 | **order-service**      | 8083 | Order aggregate, saga reactions, compensation           | PostgreSQL + Outbox     |
@@ -222,7 +224,7 @@ sequenceDiagram
 
 Published host ports above are for local inspection; the intended client entry point is still **api-gateway :8080**. `order-service` / `payment-service` are not published to the host.
 
-**Supporting infrastructure (Docker Compose):** 6× PostgreSQL, Kafka, Kafka UI, Debezium Connect, Prometheus, Grafana, Loki, Promtail, Redis, Elasticsearch.
+**Supporting infrastructure (Docker Compose):** 6× PostgreSQL, Kafka, Kafka UI, Debezium Connect, Prometheus, Grafana, Loki, Promtail, Redis ×2 (projection cache + gateway rate limit), Elasticsearch.
 
 ---
 
@@ -246,7 +248,7 @@ Published host ports above are for local inspection; the intended client entry p
 ### Security
 
 - **JWT authentication** at the API Gateway; downstream services trust gateway-injected identity headers.
-- **In-memory rate limiting** at the gateway (per client IP): stricter on `/api/v1/auth/**`, higher default for other API traffic; `/actuator/**` excluded. Sufficient for a single gateway instance — swap to Redis-backed counters before horizontal scale.
+- **Redis-backed rate limiting** at the gateway (dedicated `redis-gateway`, per client IP): stricter on `/api/v1/auth/**`, higher default for other API traffic; `/actuator/**` excluded. Counters are shared across gateway instances via a Lua `INCR` + `EXPIRE` fixed window — separate from `redis-projection` (catalog cache).
 - **Shared gateway secret** (`X-Gateway-Secret`) — inventory, review, and projection reject requests without it; user-service requires it on `/api/v1/internal/**`. Clients should use the gateway (`:8080`); host-mapped backend ports are for **local debugging**, not a production exposure model.
 - **Role-based access** (e.g. admin-only product creation).
 - **Fail-closed** security configuration on protected routes.
@@ -256,7 +258,7 @@ Published host ports above are for local inspection; the intended client entry p
 ### Data & consistency
 
 - **Database-per-service** — no shared tables across bounded contexts.
-- **CQRS / precomputed read model** — write services own their transactional stores; Kafka events materialize **denormalized** product, review, and order views into `projection-service`'s PostgreSQL. Catalog and order **reads** hit that query-shaped store (plus Redis / Elasticsearch) instead of joining across write databases — so browse/search stay fast and independent of write-path load. The trade-off is **eventual consistency** until projections catch up.
+- **CQRS / precomputed read model** — write services own their transactional stores; Kafka events materialize **denormalized** product, review, and order views into `projection-service`'s PostgreSQL. **Browse/list** (`GET /api/catalog/products`) reads that Postgres model (paginated; optional `category`). **Product detail** uses **Redis** cache-aside then DB. **Full-text search** goes to **Elasticsearch**. Checkout still hits the inventory **write model** for an authoritative quote. The trade-off is **eventual consistency** until projections catch up.
 - **Eventual consistency** on catalog/search; **strong consistency** on purchase via synchronous inventory reserve.
 
 ---
@@ -482,7 +484,7 @@ The codebase includes **35 test classes (121 test methods)** covering saga consu
 
 ```
 ecom/
-├── api-gateway/           # Spring Cloud Gateway, JWT filter, rate limiting
+├── api-gateway/           # Spring Cloud Gateway, JWT filter, Redis rate limiting
 ├── user-service/          # Auth & identity
 ├── inventory-service/     # Catalog write, purchase, stock saga
 ├── order-service/         # Order aggregate & saga reactions
@@ -544,7 +546,7 @@ ecom/
 | | |
 |---|---|
 | **Context** | Catalog browsing and search must stay fast under load. Serving those queries from write databases would force cross-service joins, contend with transactional traffic, and couple read latency to inventory/order write paths. Checkout, however, must not show stale prices or phantom stock from a lagging projection. |
-| **Decision** | **Writes** stay in `inventory-service` (and other write services). Domain events update a dedicated **projection database** in `projection-service`: **precomputed, denormalized** product/order/review views shaped for read APIs. Hot paths add **Redis** caching; full-text search uses **Elasticsearch**. `POST /api/products/checkout` deliberately hits the **write model** for an authoritative quote right before purchase. |
+| **Decision** | **Writes** stay in `inventory-service` (and other write services). Domain events update a dedicated **projection database** in `projection-service`: **precomputed, denormalized** product/order/review views shaped for read APIs. **List/browse** is served from Postgres; **detail** adds **Redis** cache-aside; **full-text search** uses **Elasticsearch**. `POST /api/products/checkout` deliberately hits the **write model** for an authoritative quote right before purchase. |
 | **Consequences** | **Pros:** Optimized reads without touching write DBs; catalog/search scale independently; no overselling from stale projection data at purchase time.<br><br>**Cons:** Two intentional paths for product data (read vs. write); projection lag is visible until consumers catch up — must stay documented. |
 
 ---

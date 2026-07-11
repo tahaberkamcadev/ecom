@@ -20,7 +20,7 @@ import java.io.IOException;
 public class RateLimitFilter extends OncePerRequestFilter {
 
     private final RateLimitProperties properties;
-    private final InMemoryRateLimiter rateLimiter;
+    private final RateLimiter rateLimiter;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
