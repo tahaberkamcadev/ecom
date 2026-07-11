@@ -44,7 +44,7 @@ This repository demonstrates how to design and operate a **cloud-native e-commer
 | ------------------------ | --------------------------------------------------------------------------------- |
 | **Distributed systems**  | Choreography-based **saga**, compensation, **at-least-once** delivery handling    |
 | **Data consistency**     | **Transactional Outbox** + **Debezium CDC** instead of dual-write anti-patterns   |
-| **Architecture styles**  | **CQRS**, **database-per-service**, **API Gateway**, **event-driven** integration |
+| **Architecture styles**  | **CQRS**, **database-per-service**, **API Gateway**, **event-driven** integration, **Redis cache-aside** |
 | **Operational maturity** | **Prometheus**, **Grafana**, **Loki**, health probes, structured dashboards       |
 | **Engineering quality**  | **Java 21**, **Spring Boot 4**, unit tests, Dockerized local environment          |
 
@@ -197,7 +197,7 @@ sequenceDiagram
 | **API edge**           | **Spring Cloud Gateway** (WebMVC), **JWT** (JJWT), **Redis**-backed **rate limiting** |
 | **Messaging**          | **Apache Kafka** (KRaft), **Debezium** Outbox Event Router                  |
 | **Databases**          | **PostgreSQL 17** (database-per-service, logical replication enabled)       |
-| **Read model**         | **CQRS** — precomputed projection DB, **Redis** cache, **Elasticsearch 9** search |
+| **Read model**         | **CQRS** — precomputed projection DB, **Redis** cache-aside, **Elasticsearch 9** search |
 | **Observability**      | **Micrometer**, **Prometheus**, **Grafana**, **Loki**, **Promtail**         |
 | **Packaging**          | **Docker**, **Docker Compose**, multi-stage Dockerfiles, readiness probes   |
 | **Testing**            | JUnit 5, Mockito, AssertJ, `@WebMvcTest`, service-layer unit tests          |
@@ -248,7 +248,7 @@ Published host ports above are for local inspection; the intended client entry p
 ### Security
 
 - **JWT authentication** at the API Gateway; downstream services trust gateway-injected identity headers.
-- **Redis-backed rate limiting** at the gateway (dedicated `redis-gateway`, per client IP): stricter on `/api/v1/auth/**`, higher default for other API traffic; `/actuator/**` excluded. Counters are shared across gateway instances via a Lua `INCR` + `EXPIRE` fixed window — separate from `redis-projection` (catalog cache).
+- **Redis-backed rate limiting** at the gateway (dedicated `redis-gateway`, per client IP): stricter on `/api/v1/auth/**`, higher default for other API traffic; `/actuator/**` excluded. Counters are shared across gateway instances via a Lua `INCR` + `EXPIRE` fixed window — separate from `redis-projection` (product **detail** cache-aside).
 - **Shared gateway secret** (`X-Gateway-Secret`) — inventory, review, and projection reject requests without it; user-service requires it on `/api/v1/internal/**`. Clients should use the gateway (`:8080`); host-mapped backend ports are for **local debugging**, not a production exposure model.
 - **Role-based access** (e.g. admin-only product creation).
 - **Fail-closed** security configuration on protected routes.
@@ -259,6 +259,7 @@ Published host ports above are for local inspection; the intended client entry p
 
 - **Database-per-service** — no shared tables across bounded contexts.
 - **CQRS / precomputed read model** — write services own their transactional stores; Kafka events materialize **denormalized** product, review, and order views into `projection-service`'s PostgreSQL. **Browse/list** (`GET /api/catalog/products`) reads that Postgres model (paginated; optional `category`). **Product detail** uses **Redis** cache-aside then DB. **Full-text search** goes to **Elasticsearch**. Checkout still hits the inventory **write model** for an authoritative quote. The trade-off is **eventual consistency** until projections catch up.
+- **Redis cache-aside (product detail only)** — `GET /api/catalog/products/{id}` looks up `productById` in `redis-projection` first; on miss it loads Postgres and populates the cache. Entries use a TTL (default **30 minutes**) and are **`@CacheEvict`ed** when projection handlers update that product (stock, price, reviews, etc.). The full catalog is **not** kept in Redis — list/search stay on Postgres/ES so cache keys stay bounded and invalidation stays simple.
 - **Eventual consistency** on catalog/search; **strong consistency** on purchase via synchronous inventory reserve.
 
 ---
@@ -403,6 +404,8 @@ curl -s "http://localhost:8080/api/catalog/products/search?q=Monitor&page=0&size
 
 Both return `{ "items": [...], "total": N, "page": 0, "size": 20 }`. Catalog product GETs are **public** (Bearer optional).
 
+Product **detail** (`GET /api/catalog/products/{id}`) is served via **Redis cache-aside** (miss → Postgres; TTL + eviction on projection updates) — not a full-catalog dump in Redis.
+
 ---
 
 ## Frontend Client
@@ -452,7 +455,7 @@ All external traffic goes through the **API Gateway** (`localhost:8080`):
 | `/api/v1/users/**` | user-service | `GET /api/v1/users/me`, `PUT /api/v1/users/me`, `PUT /api/v1/users/me/password` |
 | `/api/products/**` | inventory-service | `POST /api/products/checkout`, `POST /api/products/purchase`, `POST /api/products` (admin create) |
 | `/api/reviews/**` | review-service | `POST /api/reviews` |
-| `/api/catalog/products/**` | projection-service | `GET /api/catalog/products` (**public** Postgres list; optional `category`, `page`, `size` → `{items,total,page,size}`), `GET .../search` (ES; optional `q`/`category`), `GET .../{id}`, `GET .../{id}/reviews` |
+| `/api/catalog/products/**` | projection-service | `GET /api/catalog/products` (**public** Postgres list; optional `category`, `page`, `size` → `{items,total,page,size}`), `GET .../search` (ES; optional `q`/`category`), `GET .../{id}` (**Redis** cache-aside → Postgres), `GET .../{id}/reviews` |
 | `/api/catalog/orders/**` | projection-service | `GET /api/catalog/orders`, `GET /api/catalog/orders/{orderId}` (JWT required) |
 
 
@@ -546,8 +549,8 @@ ecom/
 | | |
 |---|---|
 | **Context** | Catalog browsing and search must stay fast under load. Serving those queries from write databases would force cross-service joins, contend with transactional traffic, and couple read latency to inventory/order write paths. Checkout, however, must not show stale prices or phantom stock from a lagging projection. |
-| **Decision** | **Writes** stay in `inventory-service` (and other write services). Domain events update a dedicated **projection database** in `projection-service`: **precomputed, denormalized** product/order/review views shaped for read APIs. **List/browse** is served from Postgres; **detail** adds **Redis** cache-aside; **full-text search** uses **Elasticsearch**. `POST /api/products/checkout` deliberately hits the **write model** for an authoritative quote right before purchase. |
-| **Consequences** | **Pros:** Optimized reads without touching write DBs; catalog/search scale independently; no overselling from stale projection data at purchase time.<br><br>**Cons:** Two intentional paths for product data (read vs. write); projection lag is visible until consumers catch up — must stay documented. |
+| **Decision** | **Writes** stay in `inventory-service` (and other write services). Domain events update a dedicated **projection database** in `projection-service`: **precomputed, denormalized** product/order/review views shaped for read APIs. **List/browse** is served from Postgres; **detail** uses **Redis cache-aside** (`productById`, TTL default 30m, `@CacheEvict` on projection updates — not a full-catalog warm cache); **full-text search** uses **Elasticsearch**. `POST /api/products/checkout` deliberately hits the **write model** for an authoritative quote right before purchase. |
+| **Consequences** | **Pros:** Optimized reads without touching write DBs; list/search scale independently of detail hot keys; cache footprint stays bounded; no overselling from stale projection data at purchase time.<br><br>**Cons:** Two intentional paths for product data (read vs. write); projection lag is visible until consumers catch up; detail can be briefly stale until TTL/evict — must stay documented. |
 
 ---
 
