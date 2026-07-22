@@ -549,7 +549,7 @@ ecom/
 | | |
 |---|---|
 | **Context** | Catalog browsing and search must stay fast under load. Serving those queries from write databases would force cross-service joins, contend with transactional traffic, and couple read latency to inventory/order write paths. Checkout, however, must not show stale prices or phantom stock from a lagging projection. |
-| **Decision** | **Writes** stay in `inventory-service` (and other write services). Domain events update a dedicated **projection database** in `projection-service`: **precomputed, denormalized** product/order/review views shaped for read APIs. **List/browse** is served from Postgres; **detail** uses **Redis cache-aside** (`productById`, TTL default 30m, `@CacheEvict` on projection updates — not a full-catalog warm cache); **full-text search** uses **Elasticsearch**. `POST /api/products/checkout` deliberately hits the **write model** for an authoritative quote right before purchase. |
+| **Decision** | **Writes** stay in `inventory-service` (and other write services). Domain events update a dedicated **projection database** in `projection-service`: **precomputed, denormalized** product/order/review views shaped for read APIs. **List/browse** is served from Postgres; **detail** uses **Redis cache-aside** (`productById`, TTL default 30m, `@CacheEvict` on projection updates — not a full-catalog warm cache); **full-text search** uses **Elasticsearch**. `POST /api/products/checkout` deliberately hits the **write model** for an authoritative quote right before purchase. Read views also store **precomputed aggregates** so read APIs never recompute or join at query time — e.g. `ProductView.averageRating` / `ratingSum` / `reviewCount` with a `latestReviews` JSON snapshot, and `OrderView.totalQuantity` / `lineCount` / `summaryPreview` (staleness semantics in ADR-010). |
 | **Consequences** | **Pros:** Optimized reads without touching write DBs; list/search scale independently of detail hot keys; cache footprint stays bounded; no overselling from stale projection data at purchase time.<br><br>**Cons:** Two intentional paths for product data (read vs. write); projection lag is visible until consumers catch up; detail can be briefly stale until TTL/evict — must stay documented. |
 
 ---
@@ -601,6 +601,30 @@ ecom/
 | **Context** | Distributed systems are hard to debug without correlated metrics and logs. |
 | **Decision** | All services expose `/actuator/prometheus` and readiness probes. **Prometheus** scrapes every instance; **Grafana** ships with stack health dashboards; **Loki + Promtail** aggregate container logs. Business counters (`ecom_purchase_total`, `ecom_saga_compensation_total`) track domain outcomes. |
 | **Consequences** | **Pros:** Single-command local demo is observable end-to-end; behavior verifiable without reading source.<br><br>**Cons:** Full stack needs ~8 GB RAM. |
+
+---
+
+### ADR-010 - Denormalized Read Models & Review Eventual Consistency
+
+| | |
+|---|---|
+| **Context** | Read models in `projection-service` are **denormalized on purpose**: rendering a product card or a review list must not require cross-service calls at query time. So the projection **copies** data owned by other services — most notably the **review author name** (`userFirstName`/`userLastName`, taken from `user-service` when the review is created) and **rating aggregates** on `ProductView` (`ratingSum`, `reviewCount`, `averageRating`, plus a `latestReviews` JSON snapshot). Copied data can drift from its source of truth. |
+| **Decision** | Denormalized fields are **point-in-time snapshots** kept in sync **only through domain events**, never via synchronous read-time lookups. `saga.review.review_created` incrementally updates the product's rating aggregates and `latestReviews`. The author name stored on a review is the name **as of when the review was written** — there is **no back-propagation** if the user later renames themselves. Consistency is **eventual** (bounded by consumer lag) and made safe by idempotent consumers (ADR-005). |
+| **Consequences** | **Pros:** Read APIs are single-store, join-free and fast; no fan-out to `user-service`/`review-service` on every catalog request; rating math runs once on write, not on every read.<br><br>**Cons:** Review author names are **not** updated retroactively on profile rename (arguably correct — a review should reflect the identity *at posting time* — but must be documented); rating aggregates are briefly stale until `review_created` is projected; rebuilding a projection requires replaying events. |
+
+---
+
+## Known Trade-offs & Production Roadmap
+
+> This backend is a **local, portfolio-grade** reference — it runs via `docker compose up` and is **not** intended to be deployed. The items below are **conscious** trade-offs given that scope; documenting them (rather than hiding them) is deliberate, and each has a clear production path.
+
+| Area | Current (local / portfolio) | Production direction |
+| ---- | --------------------------- | -------------------- |
+| **Schema management** | `ddl-auto=update` auto-generates DDL; only `user-service` ships a `prod` profile with `validate`. | Add **Flyway** migrations per service; run `validate` everywhere and version every schema change. |
+| **Persistence tests** | Unit/slice tests run on **H2** + `spring-kafka-test`, which can hide Postgres-specific behavior (JSON columns, logical replication). | **Testcontainers** (real Postgres + Kafka) for the outbox → CDC → saga paths. |
+| **JWT** | **Symmetric HS256** with a secret shared by gateway + user-service; no refresh token, no revocation. | **Asymmetric RS256/JWKS** (only the issuer signs; everyone else verifies with the public key) + refresh-token rotation. |
+| **Cross-cutting code** | Outbox, idempotency, and gateway/auth filters are **copy-pasted** across services. | Extract a thin shared **Spring Boot starter** — or keep the duplication as an explicit, documented decoupling choice. |
+| **Inter-service trust** | Static `X-Gateway-Secret` header asserts "came through the gateway". | Platform-layer enforcement: network policies / **mTLS** / a service mesh. |
 
 ---
 
