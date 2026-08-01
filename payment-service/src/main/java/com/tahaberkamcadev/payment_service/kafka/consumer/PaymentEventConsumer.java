@@ -7,13 +7,9 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
-import com.tahaberkamcadev.payment_service.entity.Payment;
 import com.tahaberkamcadev.payment_service.kafka.event.inbound.OrderCreatedEvent;
-import com.tahaberkamcadev.payment_service.service.OutboxEventService;
 import com.tahaberkamcadev.payment_service.service.PaymentService;
-import com.tahaberkamcadev.payment_service.service.ProcessedEventService;
 
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -23,11 +19,8 @@ import lombok.extern.slf4j.Slf4j;
 public class PaymentEventConsumer {
 
     private final PaymentService paymentService;
-    private final OutboxEventService outboxEventService;
-    private final ProcessedEventService processedEventService;
 
     @KafkaListener(topics = "${app.kafka.topics.order-created}", groupId = "${spring.kafka.consumer.group-id}")
-    @Transactional
     public void consumeOrderCreatedEvent(@Payload String payload, Acknowledgment ack) {
         OrderCreatedEvent event;
         try {
@@ -42,27 +35,18 @@ public class PaymentEventConsumer {
             throw new IllegalArgumentException("Received invalid OrderCreatedEvent: " + event);
         }
 
-        if (processedEventService.markIfNew(event.getEventId(), "order_created")) {
-            Payment payment = Payment.builder()
-                .orderId(event.getOrderId())
-                .paymentMethod("Visa")
-                .status("PENDING")
-                .amount(event.getTotalAmount())
-                .build();
+        // The slow (mock) payment-provider call runs OUTSIDE any DB transaction, so this
+        // listener thread never holds a DB connection while it waits. Combined with
+        // partitioned topics + listener concurrency, independent orders settle in parallel.
+        String status = paymentService.mockPaymentProcessing(event.getOrderId());
 
-            payment.setStatus(paymentService.mockPaymentProcessing(payment));
-            paymentService.createPayment(payment);
-            outboxEventService.saveOutboxEvent(
-                event.getOrderId(),
-                event.getCustomerId(),
-                payment.getStatus()
-            );
-            log.info("Payment {} for order {}", payment.getStatus(), event.getOrderId());
-            ack.acknowledge();
-        } else {
+        // Marker + payment row + outbox event are persisted atomically and idempotently.
+        boolean processed = paymentService.settlePayment(event, status);
+        if (!processed) {
             log.info("Duplicate event received: {} - {}", event.getEventType(), event.getEventId());
-            ack.acknowledge();
         }
+
+        ack.acknowledge();
     }
 
     @KafkaListener(

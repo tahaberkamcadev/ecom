@@ -1,7 +1,10 @@
 """
+Single-user checkout/purchase demo against a locally running ecom stack.
+
 Requirements:
-  pip install -r scripts/requirements.txt
   docker compose up -d --build
+  python3 -m venv scripts/.venv && source scripts/.venv/bin/activate
+  pip install -r scripts/requirements.txt
 
 Usage:
   python scripts/demo_script.py
@@ -16,7 +19,16 @@ import sys
 import time
 from dataclasses import dataclass
 
-import requests
+try:
+    import requests
+except ImportError:
+    print(
+        "Missing dependency: requests\n"
+        "  python3 -m venv scripts/.venv && source scripts/.venv/bin/activate\n"
+        "  pip install -r scripts/requirements.txt",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 GATEWAY = "http://localhost:8080"
 ADMIN_EMAIL = "admin@demo.local"
@@ -69,7 +81,7 @@ class EcomClient:
         response.raise_for_status()
         token = response.json()["access_token"]
         self.http.headers["Authorization"] = f"Bearer {token}"
-        print(f"Giriş OK: {email}")
+        print(f"Login OK: {email}")
 
     def load_catalog(self) -> dict[str, str]:
         """Product name → productId map (Postgres catalog list, all categories)."""

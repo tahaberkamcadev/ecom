@@ -33,6 +33,11 @@ public class KafkaConsumerConfig {
     @Value("${spring.kafka.consumer.group-id}")
     private String groupId;
 
+    // Listener threads per @KafkaListener. Match to the topic partition count so
+    // independent partitions (keyed by aggregateId) are processed in parallel.
+    @Value("${app.kafka.listener.concurrency:3}")
+    private int listenerConcurrency;
+
     @Bean
     ConsumerFactory<String, String> consumerFactory() {
         return new DefaultKafkaConsumerFactory<>(Map.of(
@@ -52,6 +57,7 @@ public class KafkaConsumerConfig {
         ConcurrentKafkaListenerContainerFactory<String, String> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory);
+        factory.setConcurrency(listenerConcurrency);
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);
         factory.setCommonErrorHandler(kafkaErrorHandler);
         return factory;

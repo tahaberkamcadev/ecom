@@ -63,6 +63,7 @@ yarn-error.log
 # Build artifacts
 *.pyc
 __pycache__/
+scripts/.venv/
 
 # Database
 *.db

@@ -2,6 +2,8 @@ package com.tahaberkamcadev.payment_service.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -16,6 +18,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.tahaberkamcadev.payment_service.entity.Payment;
+import com.tahaberkamcadev.payment_service.kafka.event.inbound.OrderCreatedEvent;
 import com.tahaberkamcadev.payment_service.repository.PaymentRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -23,6 +26,12 @@ class PaymentServiceTest {
 
     @Mock
     private PaymentRepository paymentRepository;
+
+    @Mock
+    private ProcessedEventService processedEventService;
+
+    @Mock
+    private OutboxEventService outboxEventService;
 
     @InjectMocks
     private PaymentService paymentService;
@@ -65,5 +74,40 @@ class PaymentServiceTest {
         assertThatThrownBy(() -> paymentService.getPaymentByOrderId(orderId))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Payment not found for order");
+    }
+
+    @Test
+    void settlePayment_shouldPersistAtomicallyWhenNew() {
+        OrderCreatedEvent event = createOrderCreatedEvent();
+        when(processedEventService.markIfNew(event.getEventId(), "order_created")).thenReturn(true);
+
+        boolean processed = paymentService.settlePayment(event, "COMPLETED");
+
+        assertThat(processed).isTrue();
+        verify(paymentRepository).save(any(Payment.class));
+        verify(outboxEventService).saveOutboxEvent(event.getOrderId(), event.getCustomerId(), "COMPLETED");
+    }
+
+    @Test
+    void settlePayment_shouldSkipWhenDuplicate() {
+        OrderCreatedEvent event = createOrderCreatedEvent();
+        when(processedEventService.markIfNew(event.getEventId(), "order_created")).thenReturn(false);
+
+        boolean processed = paymentService.settlePayment(event, "COMPLETED");
+
+        assertThat(processed).isFalse();
+        verify(paymentRepository, never()).save(any());
+        verify(outboxEventService, never()).saveOutboxEvent(any(), any(), any());
+    }
+
+    private OrderCreatedEvent createOrderCreatedEvent() {
+        OrderCreatedEvent event = new OrderCreatedEvent();
+        event.setEventId(UUID.randomUUID());
+        event.setOrderId(UUID.randomUUID());
+        event.setCustomerId(UUID.randomUUID());
+        event.setAggregateType("Order");
+        event.setEventType("order_created");
+        event.setTotalAmount(BigDecimal.valueOf(49.99));
+        return event;
     }
 }

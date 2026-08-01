@@ -422,23 +422,33 @@ Use the frontend for interactive demos; use the [demo script](#demo-script) or c
 
 
 
-## Demo Script
+## Demo Scripts
 
-For automated runs (bulk orders, repeatable smoke tests), a Python client exercises checkout + purchase flows against the gateway. Prefer the [ecom-client](https://github.com/tahaberkamcadev/ecom-client) UI for manual exploration.
+Two Python clients exercise the gateway. Prefer the [ecom-client](https://github.com/tahaberkamcadev/ecom-client) UI for manual exploration.
 
 ```bash
+python3 -m venv scripts/.venv && source scripts/.venv/bin/activate
 pip install -r scripts/requirements.txt
-python scripts/demo_script.py
 ```
 
-Options:
+**`demo_script.py`** — single-user happy path (checkout quote + bulk purchase + a few small orders):
 
 ```bash
+python scripts/demo_script.py
 python scripts/demo_script.py --dry-run          # login + catalog only
 python scripts/demo_script.py --skip-bulk        # small orders only
 ```
 
-While the script runs, open **Grafana → E-Commerce Stack** (see [What to watch](#what-to-watch-on-e-commerce-stack)) to watch HTTP rates, Kafka activity, saga compensations (~10% payment failure rate), and DB pool metrics update in real time.
+**`concurrent_purchases.py`** — synchronized traffic burst. Workers park on a `threading.Barrier` and are released together so N purchases hit the gateway at once (useful for optimistic stock reservation + parallel Kafka consumers):
+
+```bash
+python scripts/concurrent_purchases.py                       # 20 simultaneous purchases
+python scripts/concurrent_purchases.py -n 50                 # larger burst
+python scripts/concurrent_purchases.py --product "4K Monitor" -n 25   # hammer one SKU
+python scripts/concurrent_purchases.py --dry-run             # login + catalog + plan only
+```
+
+While a script runs, open **Grafana → E-Commerce Stack** (see [What to watch](#what-to-watch-on-e-commerce-stack)) to watch HTTP rates, Kafka activity, saga compensations (~10% payment failure rate), and DB pool metrics update in real time.
 
 ---
 
@@ -500,7 +510,7 @@ ecom/
 │   ├── loki/              # Log aggregation
 │   ├── promtail/          # Docker log shipping
 │   └── debezium/          # Outbox connector definitions
-├── scripts/               # End-to-end demo client
+├── scripts/               # E2E demo + concurrent traffic clients
 ├── compose.yaml           # Full local stack
 ├── .env.example           # Environment template
 └── README.md
@@ -589,7 +599,7 @@ ecom/
 | | |
 |---|---|
 | **Context** | Integrating a real PSP is out of scope; the project still needs to prove **compensation** works. |
-| **Decision** | `payment-service` simulates processing (~2s delay) with a **~10% random failure**, publishing `payment_failed` or `payment_completed` via outbox. Failures drive the full rollback path (cancel order, restore stock, update projection). |
+| **Decision** | `payment-service` simulates processing (a **configurable ~2s delay** — `app.payment.mock-delay-ms` — run **outside** the DB transaction) with a **~10% random failure**, publishing `payment_failed` or `payment_completed` via outbox. Failures drive the full rollback path (cancel order, restore stock, update projection). |
 | **Consequences** | **Pros:** Demonstrates saga failure handling without external payment dependencies; visible in Grafana via `ecom_saga_compensation_total`.<br><br>**Cons:** Not production payment logic; replace with a PSP adapter in a real deployment. |
 
 ---
@@ -625,6 +635,7 @@ ecom/
 | **JWT** | **Symmetric HS256** with a secret shared by gateway + user-service; no refresh token, no revocation. | **Asymmetric RS256/JWKS** (only the issuer signs; everyone else verifies with the public key) + refresh-token rotation. |
 | **Cross-cutting code** | Outbox, idempotency, and gateway/auth filters are **copy-pasted** across services. | Extract a thin shared **Spring Boot starter** — or keep the duplication as an explicit, documented decoupling choice. |
 | **Inter-service trust** | Static `X-Gateway-Secret` header asserts "came through the gateway". | Platform-layer enforcement: network policies / **mTLS** / a service mesh. |
+| **Payment throughput & saga parallelism** | Topics are **partitioned** and consumers run with listener **`concurrency`**, so independent orders settle in parallel while per-order ordering is preserved by the `aggregateId` key. The payment step is a **mock PSP** that blocks its listener thread for a configurable delay, executed **outside** the DB transaction. | Integrate a real PSP as a **truly asynchronous** flow: submit the charge and return immediately, then complete the saga on the provider's **webhook/callback** (or a reconciliation poll) — **non-blocking I/O** instead of a parked thread, an **idempotency key** per charge to make retries safe, and **lag-based consumer autoscaling with backpressure** rather than a fixed thread count. |
 
 ---
 
