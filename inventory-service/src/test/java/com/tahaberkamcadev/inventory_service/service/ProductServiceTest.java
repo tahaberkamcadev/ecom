@@ -22,6 +22,8 @@ import com.tahaberkamcadev.inventory_service.dto.ProductCategory;
 import com.tahaberkamcadev.inventory_service.dto.StockAdjustment;
 import com.tahaberkamcadev.inventory_service.entity.Product;
 import com.tahaberkamcadev.inventory_service.kafka.event.inbound.OrderEvent.OrderItem;
+import com.tahaberkamcadev.inventory_service.dto.OrderPriceResponse;
+import com.tahaberkamcadev.inventory_service.exception.InsufficientStockException;
 import com.tahaberkamcadev.inventory_service.metrics.EcomBusinessMetrics;
 import com.tahaberkamcadev.inventory_service.repository.ProductRepository;
 
@@ -256,6 +258,75 @@ class ProductServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("quantity must be positive");
         verify(productRepository, never()).tryDecreaseStock(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @Test
+    void reserveSync_shouldReserveUsingReturnedPriceAndSkipAvailabilityWhenStockRemains() {
+        UUID productId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+        OrderItem item = new OrderItem();
+        item.setProductId(productId);
+        item.setQuantity(2);
+        when(productRepository.tryDecreaseStock(productId, 2))
+                .thenReturn(java.util.Collections.singletonList(
+                        new Object[] { BigDecimal.valueOf(12.99), 5 }));
+
+        OrderPriceResponse response = productService.reserveSync(customerId, List.of(item));
+
+        assertThat(response.getPrice()).isEqualByComparingTo("25.98");
+        assertThat(response.getItemPrices()).hasSize(1);
+        assertThat(response.getItemPrices().get(0).productId()).isEqualTo(productId);
+        assertThat(response.getItemPrices().get(0).price()).isEqualByComparingTo("12.99");
+        verify(outboxEventService).saveOutboxReservedEvent(
+                org.mockito.ArgumentMatchers.eq("Inventory"),
+                org.mockito.ArgumentMatchers.any(UUID.class),
+                org.mockito.ArgumentMatchers.eq(customerId),
+                org.mockito.ArgumentMatchers.eq(List.of(item)),
+                org.mockito.ArgumentMatchers.argThat(total -> total.compareTo(new BigDecimal("25.98")) == 0),
+                org.mockito.ArgumentMatchers.eq("stock_updated"));
+        verify(outboxEventService, never()).saveOutboxProductAvailabilityEvent(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(ecomBusinessMetrics).recordPurchase();
+        verify(productRepository, never()).findById(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void reserveSync_shouldPublishOutOfStockWhenRemainingStockIsZero() {
+        UUID productId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+        OrderItem item = new OrderItem();
+        item.setProductId(productId);
+        item.setQuantity(1);
+        when(productRepository.tryDecreaseStock(productId, 1))
+                .thenReturn(java.util.Collections.singletonList(
+                        new Object[] { BigDecimal.TEN, 0 }));
+
+        productService.reserveSync(customerId, List.of(item));
+
+        ArgumentCaptor<Product> productCaptor = ArgumentCaptor.forClass(Product.class);
+        verify(outboxEventService).saveOutboxProductAvailabilityEvent(
+                productCaptor.capture(), org.mockito.ArgumentMatchers.eq("product_out_of_stock"));
+        assertThat(productCaptor.getValue().getId()).isEqualTo(productId);
+        assertThat(productCaptor.getValue().getStock()).isZero();
+        verify(productRepository, never()).findById(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void reserveSync_shouldThrowWhenStockInsufficient() {
+        UUID productId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+        OrderItem item = new OrderItem();
+        item.setProductId(productId);
+        item.setQuantity(1);
+        when(productRepository.tryDecreaseStock(productId, 1)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> productService.reserveSync(customerId, List.of(item)))
+                .isInstanceOf(com.tahaberkamcadev.inventory_service.exception.InsufficientStockException.class)
+                .hasMessageContaining("Insufficient stock");
+        verify(outboxEventService, never()).saveOutboxReservedEvent(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test

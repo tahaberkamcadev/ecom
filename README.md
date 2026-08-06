@@ -450,7 +450,7 @@ python scripts/concurrent_purchases.py --all-stock           # one request per s
 python scripts/concurrent_purchases.py --dry-run             # login + catalog + plan only
 ```
 
-`--all-stock` builds one `quantity=1` purchase per unit of seed inventory (mirrors `inventory-service` `DevDataSeeder` stock levels — assume a **fresh** stack). For bursts over ~100 requests, disable the gateway rate limiter (`RATE_LIMIT_ENABLED=false` on `api-gateway`, or `app.rate-limit.enabled=false`).
+`--all-stock` builds one `quantity=1` purchase per unit of seed inventory (mirrors `inventory-service` `DevDataSeeder` stock levels — assume a **fresh** stack). For large bursts: raise the client open-file limit (`ulimit -n 4096`) and, if you hit HTTP 429, disable the gateway rate limiter (`RATE_LIMIT_ENABLED=false` on `api-gateway`, or `app.rate-limit.enabled=false`).
 
 While a script runs, open **Grafana → E-Commerce Stack** (see [What to watch](#what-to-watch-on-e-commerce-stack)) to watch HTTP rates, Kafka activity, saga compensations (~10% payment failure rate), and DB pool metrics update in real time.
 
@@ -460,7 +460,7 @@ While a script runs, open **Grafana → E-Commerce Stack** (see [What to watch](
 
 ## Concurrent Load Results
 
-Local Docker Compose run of `concurrent_purchases.py --all-stock` against a fresh seed (entire demo inventory drained in one synchronized burst).
+Local Docker Compose run of `concurrent_purchases.py --all-stock` against a fresh seed (entire demo inventory drained in one synchronized burst). These numbers measure the **HTTP purchase accept path** (`POST /api/products/purchase` → atomic stock reserve → `202 Accepted`), **not** the time until every order reaches `DELIVERED` / `CANCELLED` in the saga.
 
 ### Setup
 
@@ -469,26 +469,29 @@ Local Docker Compose run of `concurrent_purchases.py --all-stock` against a fres
 | Environment | Full stack via `docker compose` on a single developer machine |
 | Client | `scripts/concurrent_purchases.py --all-stock` |
 | Burst size | **485** concurrent purchases (sum of all seed SKU stock units) |
-| Pattern | Barrier release → all workers hit `POST /api/products/purchase` together |
-| Stock path | Atomic `UPDATE … WHERE stock >= :qty` (optimistic reservation) |
+| Pattern | `threading.Barrier` release → all workers hit `POST /api/products/purchase` together |
+| Stock path | Atomic `UPDATE … WHERE stock >= :qty RETURNING price, stock` (optimistic reservation, single round-trip) |
+| DB pools | Hikari `maximum-pool-size=50` per service |
+| Client note | Large bursts need a higher open-file soft limit (`ulimit -n 4096`); otherwise the Python client fails with `Errno 24` before the API does |
 
-### Measured results
+### Measured results (HTTP accept)
 
-| Burst | Requests | Accepted (2xx) | Failures / 429 | Barrier spread | Latency (p50 / max) | Throughput |
-| ----- | -------- | -------------- | -------------- | -------------- | ------------------- | ---------- |
-| Warm-up (`-n 20`) | 20 | **20 / 20** | 0 | ~0.9 ms | ~347 ms / ~367 ms | ~54 req/s |
-| Full seed (`--all-stock`) | 485 | **485 / 485** | 0 | ~130 ms | ~2.99 s / ~4.64 s | ~104 req/s |
+| Burst | Requests | Accepted (2xx) | Non-2xx | Barrier spread | Latency (min / p50 / p95 / max) | Mean | Throughput |
+| ----- | -------- | -------------- | ------- | -------------- | ------------------------------- | ---- | ---------- |
+| Full seed (`--all-stock`) | 485 | **485 / 485** | 0 | ~235 ms | 432 / **893** / 1594 / 1777 ms | 964 ms | **~268 req/s** (wall ~1.8 s) |
 
-### What this demonstrates
+### How to read this
 
-- **No overselling under contention** — every seed unit was reserved exactly once; HTTP acceptance matched inventory capacity.
-- **Correctness over raw speed** — p50 rising from ~350 ms (n=20) to ~3 s (n=485) on one laptop is expected: row-level lock contention on hot SKUs, shared CPU/RAM across many containers, connection pools, and a **synchronous** reserve before `202 Accepted` (see [ADR-003](#adr-003---synchronous-stock-reserve-asynchronous-downstream-steps)).
-- **Scalability story for this project** — the portfolio signal is concurrent safety + saga/outbox/CQRS design, not single-host latency. Horizontal scale (more pods, partition-aware consumers, dedicated DB resources) is the production lever; local Compose is for proving behavior, not benchmarking cloud capacity.
+- **Purchase accept is concurrent and complete** — all 485 requests received `202` inside the ~1.8 s wall window. The client does **not** wait minutes on the HTTP call.
+- **Saga finalization is a separate queue** — after accept, `order_created` → mock payment (`app.payment.mock-delay-ms`, default ~2 s, outside the DB transaction) → `DELIVERED` / `CANCELLED`. With default mock delay and listener concurrency 3, draining hundreds of payments on one laptop takes a few minutes. That lag is the **mock PSP sleeping on consumer threads**, not the purchase API blocking the shopper.
+- **No overselling under contention** — every seed unit is reserved at most once; failed payments (~10%) compensate via `order_cancelled` + stock restore.
+- **Portfolio signal** — concurrent safety + outbox/CDC + choreography saga on a single Compose host. This is not a cloud capacity benchmark; production levers are async PSP/webhooks, more partitions/replicas, and dedicated DB resources (see roadmap below).
 
 Reproduce:
 
 ```bash
-# optional for large bursts
+ulimit -n 4096
+# optional for large bursts if rate-limited:
 # RATE_LIMIT_ENABLED=false  → api-gateway env / application.properties
 
 python scripts/concurrent_purchases.py --all-stock
@@ -680,7 +683,7 @@ ecom/
 | **JWT** | **Symmetric HS256** with a secret shared by gateway + user-service; no refresh token, no revocation. | **Asymmetric RS256/JWKS** (only the issuer signs; everyone else verifies with the public key) + refresh-token rotation. |
 | **Cross-cutting code** | Outbox, idempotency, and gateway/auth filters are **copy-pasted** across services. | Extract a thin shared **Spring Boot starter** — or keep the duplication as an explicit, documented decoupling choice. |
 | **Inter-service trust** | Static `X-Gateway-Secret` header asserts "came through the gateway". | Platform-layer enforcement: network policies / **mTLS** / a service mesh. |
-| **Payment throughput & saga parallelism** | Topics are **partitioned** and consumers run with listener **`concurrency`**, so independent orders settle in parallel while per-order ordering is preserved by the `aggregateId` key. The payment step is a **mock PSP** that blocks its listener thread for a configurable delay, executed **outside** the DB transaction. | Integrate a real PSP as a **truly asynchronous** flow: submit the charge and return immediately, then complete the saga on the provider's **webhook/callback** (or a reconciliation poll) — **non-blocking I/O** instead of a parked thread, an **idempotency key** per charge to make retries safe, and **lag-based consumer autoscaling with backpressure** rather than a fixed thread count. |
+| **Payment throughput & saga parallelism** | Purchase accept scales on the write path (measured **485/485** `202`s in ~1.8 s, p50 ~900 ms — see [Concurrent Load Results](#concurrent-load-results)). Topics are **partitioned** with listener **`concurrency`**, so independent orders settle in parallel while per-order ordering is preserved by the `aggregateId` key. Final saga status still waits on a **mock PSP** that parks each listener thread for a configurable delay (`app.payment.mock-delay-ms`, outside the DB transaction) — so hundreds of payments drain over minutes on one host even though HTTP already returned. | Integrate a real PSP as a **truly asynchronous** flow: submit the charge and return immediately, then complete the saga on the provider's **webhook/callback** (or a reconciliation poll) — **non-blocking I/O** instead of a parked thread, an **idempotency key** per charge to make retries safe, and **lag-based consumer autoscaling with backpressure** rather than a fixed thread count. |
 
 ---
 

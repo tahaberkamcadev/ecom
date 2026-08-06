@@ -77,31 +77,38 @@ public class ProductService {
     public OrderPriceResponse reserveSync(UUID customerId, List<OrderItem> items) {
         validateOrderItems(items);
         UUID orderId = UUID.randomUUID();
-        for (OrderItem item : items) {
-            int updated = productRepository.tryDecreaseStock(item.getProductId(), item.getQuantity());
-            if (updated == 0) {
-                throw new InsufficientStockException("Insufficient stock for product: " + item.getProductId());
-            }
-            publishOutOfStockIfDepleted(item.getProductId());
-        }
-        OrderPriceResponse priceResponse = calculateOrderPrice(items);
-        outboxEventService.saveOutboxReservedEvent("Inventory", orderId, customerId, items, priceResponse.getPrice(), "stock_updated");
-        ecomBusinessMetrics.recordPurchase();
-        return OrderPriceResponse.builder()
-                .price(priceResponse.getPrice())
-                .itemPrices(priceResponse.getItemPrices())
-                .build();
-    }
-
-    private OrderPriceResponse calculateOrderPrice(List<OrderItem> orderItems) {
         List<ItemPrice> itemPrices = new ArrayList<>();
         BigDecimal totalPrice = BigDecimal.ZERO;
-        for (OrderItem orderItem : orderItems) {
-            Product product = productRepository.findById(orderItem.getProductId())
-                    .orElseThrow(() -> new IllegalArgumentException("Product not found: " + orderItem.getProductId()));
-            itemPrices.add(new ItemPrice(orderItem.getProductId(), product.getPrice()));
-            totalPrice = totalPrice.add(product.getPrice().multiply(BigDecimal.valueOf(orderItem.getQuantity())));
+
+        for (OrderItem item : items) {
+            // Single round-trip: decrease stock and read unit price + remaining stock together.
+            List<Object[]> reservedRows = productRepository.tryDecreaseStock(
+                    item.getProductId(), item.getQuantity());
+            if (reservedRows.isEmpty()) {
+                throw new InsufficientStockException(
+                        "Insufficient stock for product: " + item.getProductId());
+            }
+
+            Object[] reserved = reservedRows.get(0);
+            BigDecimal unitPrice = (BigDecimal) reserved[0];
+            int remainingStock = ((Number) reserved[1]).intValue();
+
+            itemPrices.add(new ItemPrice(item.getProductId(), unitPrice));
+            totalPrice = totalPrice.add(unitPrice.multiply(BigDecimal.valueOf(item.getQuantity())));
+
+            if (remainingStock == 0) {
+                // Availability payload only needs productId + stock (see OutboxEventService).
+                Product depleted = Product.builder()
+                        .id(item.getProductId())
+                        .stock(0)
+                        .build();
+                outboxEventService.saveOutboxProductAvailabilityEvent(depleted, "product_out_of_stock");
+            }
         }
+
+        outboxEventService.saveOutboxReservedEvent(
+                "Inventory", orderId, customerId, items, totalPrice, "stock_updated");
+        ecomBusinessMetrics.recordPurchase();
         return OrderPriceResponse.builder()
                 .price(totalPrice)
                 .itemPrices(itemPrices)
@@ -198,14 +205,6 @@ public class ProductService {
             outboxEventService.saveOutboxProductAvailabilityEvent(product, "product_out_of_stock");
         } else if (previousStock == 0 && newStock > 0) {
             outboxEventService.saveOutboxProductAvailabilityEvent(product, "product_in_stock");
-        }
-    }
-
-    private void publishOutOfStockIfDepleted(UUID productId) {
-        Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new IllegalArgumentException("No such product exists: " + productId));
-        if (product.getStock() == 0) {
-            outboxEventService.saveOutboxProductAvailabilityEvent(product, "product_out_of_stock");
         }
     }
 

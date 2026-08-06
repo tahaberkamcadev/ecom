@@ -25,12 +25,17 @@ Heads-up on rate limiting: the gateway limits /api/products to ~100 requests /
 60s per client IP. Keep (concurrency * rounds) under that, or start the stack
 with RATE_LIMIT_ENABLED=false. HTTP 429 responses are reported, not fatal.
 
+Large bursts (hundreds of workers) open one TCP socket each. If you see
+Errno 24 / "Too many open files", raise the process limit first:
+  ulimit -n 4096
+
 --all-stock mirrors inventory-service DevDataSeeder stock levels (fresh stack assumed).
 """
 
 from __future__ import annotations
 
 import argparse
+import resource
 import statistics
 import sys
 import threading
@@ -39,6 +44,7 @@ from dataclasses import dataclass
 
 try:
     import requests
+    from requests.adapters import HTTPAdapter
 except ImportError:
     print(
         "Missing dependency: requests\n"
@@ -129,7 +135,14 @@ def load_catalog(base_url: str, token: str, timeout: float) -> list[tuple[str, s
             break
 
     if not catalog:
-        raise RuntimeError("Catalog is empty. Is the stack up and the projection synced?")
+        raise RuntimeError(
+            "Catalog is empty (projection has no products yet).\n"
+            "  1) Is the stack up? → docker compose ps\n"
+            "  2) Inventory may have seeded while Debezium connectors were missing.\n"
+            "     Re-register connectors, then retry in a few seconds:\n"
+            "       docker compose run --rm connect-init\n"
+            "  3) Fresh start: docker compose down -v && docker compose up -d --build"
+        )
 
     print(f"Loaded {len(catalog)} products from catalog")
     return catalog
@@ -175,6 +188,32 @@ def build_tasks(
     return tasks
 
 
+def _nofile_soft_limit() -> int:
+    soft, _hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    return soft
+
+
+def ensure_open_file_budget(concurrency: int) -> None:
+    """Fail fast when the OS file-descriptor soft limit cannot host the burst.
+
+    Each worker opens one TCP socket (plus a few FDs for the interpreter / libs).
+    Hitting the limit shows up as Errno 24 'Too many open files' on the client —
+    not as a backend failure.
+    """
+    soft = _nofile_soft_limit()
+    # Leave headroom for the interpreter, loaded libs, and Docker Desktop sockets.
+    needed = concurrency + 256
+    if soft >= needed:
+        return
+    raise RuntimeError(
+        f"Open-file soft limit is {soft}, but this burst needs about {needed} FDs "
+        f"({concurrency} workers + headroom). Raise it in this shell, then retry:\n"
+        f"  ulimit -n 4096\n"
+        f"Current failure mode would be client-side ConnectionError / Errno 24, "
+        f"not an API/gateway problem."
+    )
+
+
 def _worker(
     *,
     worker_id: int,
@@ -188,11 +227,10 @@ def _worker(
     results: list[RequestResult],
     lock: threading.Lock,
 ) -> None:
-    # A requests.Session is not thread-safe, so every worker gets its own. The token
-    # is a shared, read-only string. Nothing here can raise before the barrier, which
-    # guarantees all workers reach the release point.
-    session = requests.Session()
-    session.headers.update({"Accept": "application/json", "Authorization": f"Bearer {token}"})
+    # Prepare the immutable request bits before the barrier. Do NOT open a Session
+    # yet — creating hundreds of sessions early wastes FDs and can trip ulimit
+    # before a single purchase is sent. Token is shared read-only.
+    headers = {"Accept": "application/json", "Authorization": f"Bearer {token}"}
     payload = {"items": [item]}
     result = RequestResult(
         worker=worker_id,
@@ -208,13 +246,17 @@ def _worker(
         result.detail = "barrier broken / timed out before release"
         with lock:
             results.append(result)
-        session.close()
         return
 
     result.released_at = time.time()
     start = time.perf_counter()
+    session = requests.Session()
+    # One connection per worker is enough for a single POST; default pool sizes
+    # multiply FD usage under large -n bursts for no benefit.
+    session.mount("http://", HTTPAdapter(pool_connections=1, pool_maxsize=1))
+    session.mount("https://", HTTPAdapter(pool_connections=1, pool_maxsize=1))
     try:
-        response = session.post(url, json=payload, timeout=timeout)
+        response = session.post(url, json=payload, headers=headers, timeout=timeout)
         result.latency_ms = (time.perf_counter() - start) * 1000.0
         result.status = response.status_code
         result.ok = response.ok
@@ -339,6 +381,11 @@ def print_summary(title: str, results: list[RequestResult], is_aggregate: bool =
         for r in failures[:5]:
             code = r.status if r.status is not None else "ERR"
             print(f"    - worker {r.worker:>3} [{code}] {r.product} x{r.quantity}: {r.detail}")
+        if any("Too many open files" in r.detail or "Errno 24" in r.detail for r in failures):
+            print(
+                "  tip: client hit the OS open-file limit (not a backend 5xx). "
+                "Run `ulimit -n 4096` in this shell and retry."
+            )
 
 
 # --------------------------------------------------------------------------- #
@@ -392,6 +439,7 @@ def main() -> None:
     if total_requests > 100:
         print("WARNING: >100 total requests may hit the gateway rate limit (HTTP 429). "
               "Run the stack with RATE_LIMIT_ENABLED=false for heavy load.")
+    print(f"Open files  : soft ulimit {_nofile_soft_limit()} (need ~{concurrency + 256} for this burst)")
 
     try:
         token = login(base_url, args.email, args.password, args.timeout)
@@ -408,6 +456,7 @@ def main() -> None:
             print("\n[dry-run] no purchases sent.")
             return
 
+        ensure_open_file_budget(len(tasks))
         url = f"{base_url}/api/products/purchase"
         all_results: list[RequestResult] = []
         for round_no in range(1, args.rounds + 1):
