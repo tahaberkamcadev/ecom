@@ -24,7 +24,8 @@
 - [Observability](#observability)
 - [Quick Start](#quick-start)
 - [Frontend Client](#frontend-client)
-- [Demo Script](#demo-script)
+- [Demo Scripts](#demo-scripts)
+- [Concurrent Load Results](#concurrent-load-results)
 - [API Entry Points](#api-entry-points)
 - [Testing](#testing)
 - [Project Structure](#project-structure)
@@ -445,10 +446,54 @@ python scripts/demo_script.py --skip-bulk        # small orders only
 python scripts/concurrent_purchases.py                       # 20 simultaneous purchases
 python scripts/concurrent_purchases.py -n 50                 # larger burst
 python scripts/concurrent_purchases.py --product "4K Monitor" -n 25   # hammer one SKU
+python scripts/concurrent_purchases.py --all-stock           # one request per seed stock unit (~485)
 python scripts/concurrent_purchases.py --dry-run             # login + catalog + plan only
 ```
 
+`--all-stock` builds one `quantity=1` purchase per unit of seed inventory (mirrors `inventory-service` `DevDataSeeder` stock levels — assume a **fresh** stack). For bursts over ~100 requests, disable the gateway rate limiter (`RATE_LIMIT_ENABLED=false` on `api-gateway`, or `app.rate-limit.enabled=false`).
+
 While a script runs, open **Grafana → E-Commerce Stack** (see [What to watch](#what-to-watch-on-e-commerce-stack)) to watch HTTP rates, Kafka activity, saga compensations (~10% payment failure rate), and DB pool metrics update in real time.
+
+---
+
+
+
+## Concurrent Load Results
+
+Local Docker Compose run of `concurrent_purchases.py --all-stock` against a fresh seed (entire demo inventory drained in one synchronized burst).
+
+### Setup
+
+| Item | Detail |
+| ---- | ------ |
+| Environment | Full stack via `docker compose` on a single developer machine |
+| Client | `scripts/concurrent_purchases.py --all-stock` |
+| Burst size | **485** concurrent purchases (sum of all seed SKU stock units) |
+| Pattern | Barrier release → all workers hit `POST /api/products/purchase` together |
+| Stock path | Atomic `UPDATE … WHERE stock >= :qty` (optimistic reservation) |
+
+### Measured results
+
+| Burst | Requests | Accepted (2xx) | Failures / 429 | Barrier spread | Latency (p50 / max) | Throughput |
+| ----- | -------- | -------------- | -------------- | -------------- | ------------------- | ---------- |
+| Warm-up (`-n 20`) | 20 | **20 / 20** | 0 | ~0.9 ms | ~347 ms / ~367 ms | ~54 req/s |
+| Full seed (`--all-stock`) | 485 | **485 / 485** | 0 | ~130 ms | ~2.99 s / ~4.64 s | ~104 req/s |
+
+### What this demonstrates
+
+- **No overselling under contention** — every seed unit was reserved exactly once; HTTP acceptance matched inventory capacity.
+- **Correctness over raw speed** — p50 rising from ~350 ms (n=20) to ~3 s (n=485) on one laptop is expected: row-level lock contention on hot SKUs, shared CPU/RAM across many containers, connection pools, and a **synchronous** reserve before `202 Accepted` (see [ADR-003](#adr-003---synchronous-stock-reserve-asynchronous-downstream-steps)).
+- **Scalability story for this project** — the portfolio signal is concurrent safety + saga/outbox/CQRS design, not single-host latency. Horizontal scale (more pods, partition-aware consumers, dedicated DB resources) is the production lever; local Compose is for proving behavior, not benchmarking cloud capacity.
+
+Reproduce:
+
+```bash
+# optional for large bursts
+# RATE_LIMIT_ENABLED=false  → api-gateway env / application.properties
+
+python scripts/concurrent_purchases.py --all-stock
+python scripts/concurrent_purchases.py --all-stock --dry-run   # plan only
+```
 
 ---
 
