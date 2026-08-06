@@ -18,11 +18,14 @@ Usage:
   python scripts/concurrent_purchases.py -n 50                 # 50 at once
   python scripts/concurrent_purchases.py -n 30 --rounds 3      # 3 synchronized bursts
   python scripts/concurrent_purchases.py --product "4K Monitor" -n 25   # hammer one SKU
+  python scripts/concurrent_purchases.py --all-stock           # one request per seed stock unit
   python scripts/concurrent_purchases.py --dry-run             # login + catalog + plan only
 
 Heads-up on rate limiting: the gateway limits /api/products to ~100 requests /
 60s per client IP. Keep (concurrency * rounds) under that, or start the stack
 with RATE_LIMIT_ENABLED=false. HTTP 429 responses are reported, not fatal.
+
+--all-stock mirrors inventory-service DevDataSeeder stock levels (fresh stack assumed).
 """
 
 from __future__ import annotations
@@ -50,6 +53,20 @@ ADMIN_EMAIL = "admin@demo.local"
 ADMIN_PASSWORD = "DemoAdmin1!"
 
 BARRIER_TIMEOUT_SECONDS = 30.0
+
+# Keep in sync with inventory-service DevDataSeeder.PRODUCT_SEEDS stock values.
+SEED_STOCKS: dict[str, int] = {
+    "Wireless Headphones": 40,
+    "Mechanical Keyboard": 35,
+    "4K Monitor": 20,
+    "Classic Hoodie": 60,
+    "Running Shoes": 45,
+    "Ceramic Coffee Mug": 100,
+    "Clean Code": 25,
+    "Designing Data-Intensive Applications": 30,
+    "Yoga Mat": 50,
+    "Moisturizing Face Cream": 80,
+}
 
 
 @dataclass
@@ -127,8 +144,21 @@ def build_tasks(
     concurrency: int,
     product: str | None,
     quantity: int,
+    all_stock: bool = False,
 ) -> list[tuple[dict, str]]:
     """One task per worker: ({"productId", "quantity"}, product_name)."""
+    if all_stock:
+        by_name = {name: pid for name, pid in catalog}
+        missing = sorted(name for name in SEED_STOCKS if name not in by_name)
+        if missing:
+            raise KeyError(f"Seed products missing from catalog: {missing}")
+        # One qty=1 purchase per seed stock unit → drains full seed inventory in one burst.
+        tasks: list[tuple[dict, str]] = []
+        for name, stock in SEED_STOCKS.items():
+            pid = by_name[name]
+            tasks.extend((({"productId": pid, "quantity": 1}, name) for _ in range(stock)))
+        return tasks
+
     if product is not None:
         match = next((c for c in catalog if c[0] == product), None)
         if match is None:
@@ -138,7 +168,7 @@ def build_tasks(
 
     # No fixed product: spread purchases round-robin across the catalog so different
     # SKUs are hit; repeats (when concurrency > catalog size) create real contention.
-    tasks: list[tuple[dict, str]] = []
+    tasks = []
     for i in range(concurrency):
         name, pid = catalog[i % len(catalog)]
         tasks.append(({"productId": pid, "quantity": quantity}, name))
@@ -320,13 +350,15 @@ def main() -> None:
         description="Fire N concurrent purchases at the ecom gateway using a release barrier.",
     )
     parser.add_argument("-n", "--concurrency", type=int, default=20,
-                        help="simultaneous purchases per burst (default: 20)")
+                        help="simultaneous purchases per burst (default: 20; ignored with --all-stock)")
     parser.add_argument("--rounds", type=int, default=1,
                         help="number of synchronized bursts (default: 1)")
     parser.add_argument("-q", "--quantity", type=int, default=1,
-                        help="units per purchase (default: 1)")
+                        help="units per purchase (default: 1; ignored with --all-stock)")
     parser.add_argument("--product", default=None,
                         help="buy this exact product name in every request (contention demo)")
+    parser.add_argument("--all-stock", action="store_true",
+                        help="buy every seed stock unit at once (1 qty=1 request per unit)")
     parser.add_argument("--sleep", type=float, default=1.0,
                         help="seconds to wait between rounds (default: 1.0)")
     parser.add_argument("--base-url", default=GATEWAY, help="gateway URL")
@@ -337,18 +369,26 @@ def main() -> None:
                         help="login + catalog + print the plan, but send no purchases")
     args = parser.parse_args()
 
+    if args.all_stock and args.product is not None:
+        parser.error("--all-stock and --product cannot be used together")
     if args.concurrency < 1:
         parser.error("--concurrency must be >= 1")
     if args.rounds < 1:
         parser.error("--rounds must be >= 1")
 
     base_url = args.base_url.rstrip("/")
-    total_requests = args.concurrency * args.rounds
+    seed_units = sum(SEED_STOCKS.values())
+    concurrency = seed_units if args.all_stock else args.concurrency
+    quantity = 1 if args.all_stock else args.quantity
+    total_requests = concurrency * args.rounds
 
     print(f"Gateway     : {base_url}")
-    print(f"Plan        : {args.concurrency} concurrent × {args.rounds} round(s) = {total_requests} purchases")
-    print(f"Quantity    : {args.quantity} per purchase")
-    print(f"Target      : {args.product if args.product else 'round-robin across catalog'}")
+    print(f"Plan        : {concurrency} concurrent × {args.rounds} round(s) = {total_requests} purchases")
+    print(f"Quantity    : {quantity} per purchase")
+    if args.all_stock:
+        print(f"Target      : all seed stock ({seed_units} units across {len(SEED_STOCKS)} SKUs)")
+    else:
+        print(f"Target      : {args.product if args.product else 'round-robin across catalog'}")
     if total_requests > 100:
         print("WARNING: >100 total requests may hit the gateway rate limit (HTTP 429). "
               "Run the stack with RATE_LIMIT_ENABLED=false for heavy load.")
@@ -356,7 +396,7 @@ def main() -> None:
     try:
         token = login(base_url, args.email, args.password, args.timeout)
         catalog = load_catalog(base_url, token, args.timeout)
-        tasks = build_tasks(catalog, args.concurrency, args.product, args.quantity)
+        tasks = build_tasks(catalog, args.concurrency, args.product, args.quantity, args.all_stock)
 
         if args.dry_run:
             distribution: dict[str, int] = {}
@@ -364,7 +404,7 @@ def main() -> None:
                 distribution[name] = distribution.get(name, 0) + 1
             print("\n[dry-run] per-burst product distribution:")
             for name, count in sorted(distribution.items(), key=lambda kv: (-kv[1], kv[0])):
-                print(f"  - {name} x{args.quantity}  ×{count} workers")
+                print(f"  - {name} x{quantity}  ×{count} workers")
             print("\n[dry-run] no purchases sent.")
             return
 
