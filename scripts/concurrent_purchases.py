@@ -35,12 +35,16 @@ Errno 24 / "Too many open files", raise the process limit first:
 from __future__ import annotations
 
 import argparse
-import resource
 import statistics
 import sys
 import threading
 import time
 from dataclasses import dataclass
+
+try:
+    import resource  # POSIX only — unavailable on Windows
+except ImportError:
+    resource = None  # type: ignore[assignment]
 
 try:
     import requests
@@ -188,7 +192,10 @@ def build_tasks(
     return tasks
 
 
-def _nofile_soft_limit() -> int:
+def _nofile_soft_limit() -> int | None:
+    """POSIX RLIMIT_NOFILE soft limit, or None when unavailable (e.g. Windows)."""
+    if resource is None:
+        return None
     soft, _hard = resource.getrlimit(resource.RLIMIT_NOFILE)
     return soft
 
@@ -198,9 +205,11 @@ def ensure_open_file_budget(concurrency: int) -> None:
 
     Each worker opens one TCP socket (plus a few FDs for the interpreter / libs).
     Hitting the limit shows up as Errno 24 'Too many open files' on the client —
-    not as a backend failure.
+    not as a backend failure. Skipped on Windows (no ``resource`` module).
     """
     soft = _nofile_soft_limit()
+    if soft is None:
+        return
     # Leave headroom for the interpreter, loaded libs, and Docker Desktop sockets.
     needed = concurrency + 256
     if soft >= needed:
